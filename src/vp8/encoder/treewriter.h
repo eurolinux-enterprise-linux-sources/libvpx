@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -14,7 +15,7 @@
 /* Trees map alphabets into huffman-like codes suitable for an arithmetic
    bit coder.  Timothy S Murphy  11 October 2004 */
 
-#include "treecoder.h"
+#include "vp8/common/treecoder.h"
 
 #include "boolhuff.h"       /* for now */
 
@@ -41,7 +42,7 @@ typedef BOOL_CODER vp8_writer;
 
 /* Both of these return bits, not scaled bits. */
 
-static __inline unsigned int vp8_cost_branch(const unsigned int ct[2], vp8_prob p)
+static unsigned int vp8_cost_branch(const unsigned int ct[2], vp8_prob p)
 {
     /* Imitate existing calculation */
 
@@ -52,7 +53,7 @@ static __inline unsigned int vp8_cost_branch(const unsigned int ct[2], vp8_prob 
 /* Small functions to write explicit values and tokens, as well as
    estimate their lengths. */
 
-static __inline void vp8_treed_write
+static void vp8_treed_write
 (
     vp8_writer *const w,
     vp8_tree t,
@@ -71,7 +72,7 @@ static __inline void vp8_treed_write
     }
     while (n);
 }
-static __inline void vp8_write_token
+static void vp8_write_token
 (
     vp8_writer *const w,
     vp8_tree t,
@@ -82,7 +83,7 @@ static __inline void vp8_write_token
     vp8_treed_write(w, t, p, x->value, x->Len);
 }
 
-static __inline int vp8_treed_cost(
+static int vp8_treed_cost(
     vp8_tree t,
     const vp8_prob *const p,
     int v,
@@ -102,7 +103,7 @@ static __inline int vp8_treed_cost(
 
     return c;
 }
-static __inline int vp8_cost_token
+static int vp8_cost_token
 (
     vp8_tree t,
     const vp8_prob *const p,
@@ -116,6 +117,10 @@ static __inline int vp8_cost_token
 
 void vp8_cost_tokens(
     int *Costs, const vp8_prob *, vp8_tree
+);
+
+void vp8_cost_tokens2(
+    int *Costs, const vp8_prob *, vp8_tree, int
 );
 
 #endif

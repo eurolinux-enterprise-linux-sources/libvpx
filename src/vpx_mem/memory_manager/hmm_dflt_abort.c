@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -28,26 +29,25 @@ static int entered = 0;
 
 /* Print abort message, file and line.  Terminate execution.
 */
-void hmm_dflt_abort(const char *file, const char *line)
-{
-    /* Avoid use of printf(), which is more likely to use heap. */
+void hmm_dflt_abort(const char *file, const char *line) {
+  /* Avoid use of printf(), which is more likely to use heap. */
 
-    if (entered)
+  if (entered)
 
-        /* The standard I/O functions called a heap function and caused
-        ** an indirect recursive call to this function.  So we'll have
-        ** to just exit without printing a message.  */
-        while (1);
-
-    entered = 1;
-
-    fputs("\n_abort - Heap corruption\n" "File: ", stderr);
-    fputs(file, stderr);
-    fputs("  Line: ", stderr);
-    fputs(line, stderr);
-    fputs("\n\n", stderr);
-    fputs("hmm_dflt_abort: while(1)!!!\n", stderr);
-    fflush(stderr);
-
+    /* The standard I/O functions called a heap function and caused
+    ** an indirect recursive call to this function.  So we'll have
+    ** to just exit without printing a message.  */
     while (1);
+
+  entered = 1;
+
+  fputs("\n_abort - Heap corruption\n" "File: ", stderr);
+  fputs(file, stderr);
+  fputs("  Line: ", stderr);
+  fputs(line, stderr);
+  fputs("\n\n", stderr);
+  fputs("hmm_dflt_abort: while(1)!!!\n", stderr);
+  fflush(stderr);
+
+  while (1);
 }

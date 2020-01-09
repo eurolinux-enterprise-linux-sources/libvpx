@@ -1,236 +1,138 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
-#include "vpx_ports/config.h"
-#include "idct.h"
+#include "vpx_config.h"
+#include "vp8_rtcd.h"
 #include "quantize.h"
-#include "reconintra.h"
-#include "reconintra4x4.h"
+#include "vp8/common/reconintra4x4.h"
 #include "encodemb.h"
-#include "invtrans.h"
-#include "recon.h"
-#include "dct.h"
-#include "g_common.h"
+#include "vp8/common/invtrans.h"
 #include "encodeintra.h"
 
-#define intra4x4ibias_rate    128
-#define intra4x4pbias_rate    256
 
-
-void vp8_update_mode_context(int *abmode, int *lbmode, int i, int best_mode)
+int vp8_encode_intra(VP8_COMP *cpi, MACROBLOCK *x, int use_dc_pred)
 {
-    if (i < 12)
+
+    int i;
+    int intra_pred_var = 0;
+    (void) cpi;
+
+    if (use_dc_pred)
     {
-        abmode[i+4] = best_mode;
+        x->e_mbd.mode_info_context->mbmi.mode = DC_PRED;
+        x->e_mbd.mode_info_context->mbmi.uv_mode = DC_PRED;
+        x->e_mbd.mode_info_context->mbmi.ref_frame = INTRA_FRAME;
+
+        vp8_encode_intra16x16mby(x);
+
+        vp8_inverse_transform_mby(&x->e_mbd);
+    }
+    else
+    {
+        for (i = 0; i < 16; i++)
+        {
+            x->e_mbd.block[i].bmi.as_mode = B_DC_PRED;
+            vp8_encode_intra4x4block(x, i);
+        }
     }
 
-    if ((i & 3) != 3)
-    {
-        lbmode[i+1] = best_mode;
-    }
+    intra_pred_var = vp8_get_mb_ss(x->src_diff);
 
+    return intra_pred_var;
 }
-#if CONFIG_RUNTIME_CPU_DETECT
-#define IF_RTCD(x) (x)
-#else
-#define IF_RTCD(x) NULL
-#endif
-void vp8_encode_intra4x4block(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *x, BLOCK *be, BLOCKD *b, int best_mode)
+
+void vp8_encode_intra4x4block(MACROBLOCK *x, int ib)
 {
-    vp8_predict_intra4x4(b, best_mode, b->predictor);
+    BLOCKD *b = &x->e_mbd.block[ib];
+    BLOCK *be = &x->block[ib];
+    int dst_stride = x->e_mbd.dst.y_stride;
+    unsigned char *dst = x->e_mbd.dst.y_buffer + b->offset;
+    unsigned char *Above = dst - dst_stride;
+    unsigned char *yleft = dst - 1;
+    unsigned char top_left = Above[-1];
 
-    ENCODEMB_INVOKE(&rtcd->encodemb, subb)(be, b, 16);
+    vp8_intra4x4_predict(Above, yleft, dst_stride, b->bmi.as_mode,
+                         b->predictor, 16, top_left);
 
-    x->vp8_short_fdct4x4(be->src_diff, be->coeff, 32);
+    vp8_subtract_b(be, b, 16);
+
+    x->short_fdct4x4(be->src_diff, be->coeff, 32);
 
     x->quantize_b(be, b);
 
-    x->e_mbd.mbmi.mb_skip_coeff &= (!b->eob);
-
-    vp8_inverse_transform_b(IF_RTCD(&rtcd->common->idct), b, 32);
-
-    RECON_INVOKE(&rtcd->common->recon, recon)(b->predictor, b->diff, *(b->base_dst) + b->dst, b->dst_stride);
+    if (*b->eob > 1)
+    {
+      vp8_short_idct4x4llm(b->dqcoeff, b->predictor, 16, dst, dst_stride);
+    }
+    else
+    {
+      vp8_dc_only_idct_add(b->dqcoeff[0], b->predictor, 16, dst, dst_stride);
+    }
 }
 
-void vp8_encode_intra4x4block_rd(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *x, BLOCK *be, BLOCKD *b, int best_mode)
-{
-    vp8_predict_intra4x4(b, best_mode, b->predictor);
-
-    ENCODEMB_INVOKE(&rtcd->encodemb, subb)(be, b, 16);
-
-    x->short_fdct4x4rd(be->src_diff, be->coeff, 32);
-
-    x->quantize_brd(be, b);
-
-    x->e_mbd.mbmi.mb_skip_coeff &= (!b->eob);
-
-    IDCT_INVOKE(&rtcd->common->idct, idct16)(b->dqcoeff, b->diff, 32);
-
-    RECON_INVOKE(&rtcd->common->recon, recon)(b->predictor, b->diff, *(b->base_dst) + b->dst, b->dst_stride);
-}
-
-void vp8_encode_intra4x4mby(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *mb)
+void vp8_encode_intra4x4mby(MACROBLOCK *mb)
 {
     int i;
 
-    MACROBLOCKD *x = &mb->e_mbd;
-    vp8_intra_prediction_down_copy(x);
+    MACROBLOCKD *xd = &mb->e_mbd;
+    intra_prediction_down_copy(xd, xd->dst.y_buffer - xd->dst.y_stride + 16);
 
     for (i = 0; i < 16; i++)
-    {
-        BLOCK *be = &mb->block[i];
-        BLOCKD *b = &x->block[i];
-
-        vp8_encode_intra4x4block(rtcd, mb, be, b, b->bmi.mode);
-    }
-
+        vp8_encode_intra4x4block(mb, i);
     return;
 }
 
-void vp8_encode_intra16x16mby(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *x)
+void vp8_encode_intra16x16mby(MACROBLOCK *x)
 {
-    int b;
+    BLOCK *b = &x->block[0];
+    MACROBLOCKD *xd = &x->e_mbd;
 
-    vp8_build_intra_predictors_mby_ptr(&x->e_mbd);
+    vp8_build_intra_predictors_mby_s(xd,
+                                         xd->dst.y_buffer - xd->dst.y_stride,
+                                         xd->dst.y_buffer - 1,
+                                         xd->dst.y_stride,
+                                         xd->dst.y_buffer,
+                                         xd->dst.y_stride);
 
-    ENCODEMB_INVOKE(&rtcd->encodemb, submby)(x->src_diff, x->src.y_buffer, x->e_mbd.predictor, x->src.y_stride);
+    vp8_subtract_mby(x->src_diff, *(b->base_src),
+        b->src_stride, xd->dst.y_buffer, xd->dst.y_stride);
 
     vp8_transform_intra_mby(x);
 
     vp8_quantize_mby(x);
 
-#if !(CONFIG_REALTIME_ONLY)
-#if 1
-
-    if (x->optimize && x->rddiv > 1)
-        vp8_optimize_mby(x, rtcd);
-
-#endif
-#endif
-
-    vp8_inverse_transform_mby(IF_RTCD(&rtcd->common->idct), &x->e_mbd);
-
-    vp8_recon16x16mby(IF_RTCD(&rtcd->common->recon), &x->e_mbd);
-
-    // make sure block modes are set the way we want them for context updates
-    for (b = 0; b < 16; b++)
-    {
-        BLOCKD *d = &x->e_mbd.block[b];
-
-        switch (x->e_mbd.mbmi.mode)
-        {
-
-        case DC_PRED:
-            d->bmi.mode = B_DC_PRED;
-            break;
-        case V_PRED:
-            d->bmi.mode = B_VE_PRED;
-            break;
-        case H_PRED:
-            d->bmi.mode = B_HE_PRED;
-            break;
-        case TM_PRED:
-            d->bmi.mode = B_TM_PRED;
-            break;
-        default:
-            d->bmi.mode = B_DC_PRED;
-            break;
-
-        }
-    }
+    if (x->optimize)
+        vp8_optimize_mby(x);
 }
 
-void vp8_encode_intra16x16mbyrd(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *x)
+void vp8_encode_intra16x16mbuv(MACROBLOCK *x)
 {
-    int b;
+    MACROBLOCKD *xd = &x->e_mbd;
 
-    vp8_build_intra_predictors_mby_ptr(&x->e_mbd);
+    vp8_build_intra_predictors_mbuv_s(xd, xd->dst.u_buffer - xd->dst.uv_stride,
+                                      xd->dst.v_buffer - xd->dst.uv_stride,
+                                      xd->dst.u_buffer - 1,
+                                      xd->dst.v_buffer - 1,
+                                      xd->dst.uv_stride,
+                                      xd->dst.u_buffer, xd->dst.v_buffer,
+                                      xd->dst.uv_stride);
 
-    ENCODEMB_INVOKE(&rtcd->encodemb, submby)(x->src_diff, x->src.y_buffer, x->e_mbd.predictor, x->src.y_stride);
-
-    vp8_transform_intra_mbyrd(x);
-
-    x->e_mbd.mbmi.mb_skip_coeff = 1;
-
-    vp8_quantize_mbyrd(x);
-
-
-    vp8_inverse_transform_mby(IF_RTCD(&rtcd->common->idct), &x->e_mbd);
-
-    vp8_recon16x16mby(IF_RTCD(&rtcd->common->recon), &x->e_mbd);
-
-    // make sure block modes are set the way we want them for context updates
-    for (b = 0; b < 16; b++)
-    {
-        BLOCKD *d = &x->e_mbd.block[b];
-
-        switch (x->e_mbd.mbmi.mode)
-        {
-
-        case DC_PRED:
-            d->bmi.mode = B_DC_PRED;
-            break;
-        case V_PRED:
-            d->bmi.mode = B_VE_PRED;
-            break;
-        case H_PRED:
-            d->bmi.mode = B_HE_PRED;
-            break;
-        case TM_PRED:
-            d->bmi.mode = B_TM_PRED;
-            break;
-        default:
-            d->bmi.mode = B_DC_PRED;
-            break;
-
-        }
-    }
-}
-
-void vp8_encode_intra16x16mbuv(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *x)
-{
-    vp8_build_intra_predictors_mbuv(&x->e_mbd);
-
-    ENCODEMB_INVOKE(&rtcd->encodemb, submbuv)(x->src_diff, x->src.u_buffer, x->src.v_buffer, x->e_mbd.predictor, x->src.uv_stride);
+    vp8_subtract_mbuv(x->src_diff, x->src.u_buffer,
+        x->src.v_buffer, x->src.uv_stride, xd->dst.u_buffer,
+        xd->dst.v_buffer, xd->dst.uv_stride);
 
     vp8_transform_mbuv(x);
 
     vp8_quantize_mbuv(x);
 
-#if !(CONFIG_REALTIME_ONLY)
-#if 1
-
-    if (x->optimize && x->rddiv > 1)
-        vp8_optimize_mbuv(x, rtcd);
-
-#endif
-#endif
-
-    vp8_inverse_transform_mbuv(IF_RTCD(&rtcd->common->idct), &x->e_mbd);
-
-    vp8_recon_intra_mbuv(IF_RTCD(&rtcd->common->recon), &x->e_mbd);
-}
-
-void vp8_encode_intra16x16mbuvrd(const VP8_ENCODER_RTCD *rtcd, MACROBLOCK *x)
-{
-    vp8_build_intra_predictors_mbuv(&x->e_mbd);
-
-    ENCODEMB_INVOKE(&rtcd->encodemb, submbuv)(x->src_diff, x->src.u_buffer, x->src.v_buffer, x->e_mbd.predictor, x->src.uv_stride);
-
-    vp8_transform_mbuvrd(x);
-
-    vp8_quantize_mbuvrd(x);
-
-
-
-    vp8_inverse_transform_mbuv(IF_RTCD(&rtcd->common->idct), &x->e_mbd);
-
-    vp8_recon_intra_mbuv(IF_RTCD(&rtcd->common->recon), &x->e_mbd);
+    if (x->optimize)
+        vp8_optimize_mbuv(x);
 }

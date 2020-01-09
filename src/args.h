@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -12,23 +13,29 @@
 #define ARGS_H
 #include <stdio.h>
 
-struct arg
-{
-    char                 **argv;
-    const char            *name;
-    const char            *val;
-    unsigned int           argv_step;
-    const struct arg_def  *def;
+struct arg {
+  char                 **argv;
+  const char            *name;
+  const char            *val;
+  unsigned int           argv_step;
+  const struct arg_def  *def;
 };
 
-typedef struct arg_def
-{
-    const char *short_name;
-    const char *long_name;
-    int         has_val;
-    const char *desc;
+struct arg_enum_list {
+  const char *name;
+  int         val;
+};
+#define ARG_ENUM_LIST_END {0}
+
+typedef struct arg_def {
+  const char *short_name;
+  const char *long_name;
+  int         has_val;
+  const char *desc;
+  const struct arg_enum_list *enums;
 } arg_def_t;
-#define ARG_DEF(s,l,v,d) {s,l,v,d}
+#define ARG_DEF(s,l,v,d) {s,l,v,d, NULL}
+#define ARG_DEF_ENUM(s,l,v,d,e) {s,l,v,d,e}
 #define ARG_DEF_LIST_END {0}
 
 struct arg arg_init(char **argv);
@@ -40,4 +47,5 @@ char **argv_dup(int argc, const char **argv);
 unsigned int arg_parse_uint(const struct arg *arg);
 int arg_parse_int(const struct arg *arg);
 struct vpx_rational arg_parse_rational(const struct arg *arg);
+int arg_parse_enum_or_int(const struct arg *arg);
 #endif

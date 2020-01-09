@@ -1,14 +1,15 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
-    EXPORT |vp8_memcpy_neon|
+    EXPORT |vp8_memcpy_partial_neon|
 
     ARM
     REQUIRE8
@@ -16,8 +17,10 @@
 
     AREA ||.text||, CODE, READONLY, ALIGN=2
 ;=========================================
-;void vp8_memcpy_neon(unsigned char *dst_ptr, unsigned char *src_ptr, int sz);
-|vp8_memcpy_neon| PROC
+;this is not a full memcpy function!!!
+;void vp8_memcpy_partial_neon(unsigned char *dst_ptr, unsigned char *src_ptr,
+;                             int sz);
+|vp8_memcpy_partial_neon| PROC
     ;pld                [r1]                        ;preload pred data
     ;pld                [r1, #128]
     ;pld                [r1, #256]

@@ -1,10 +1,11 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
@@ -13,14 +14,15 @@
     REQUIRE8
     PRESERVE8
 
-    INCLUDE vpx_asm_offsets.asm
+    INCLUDE vpx_scale_asm_offsets.asm
 
     AREA ||.text||, CODE, READONLY, ALIGN=2
-;Note: This function is used to copy source data in src_buffer[i] at beginning of
-;the encoding. The buffer has a width and height of cpi->oxcf.Width and cpi->oxcf.Height,
-;which can be ANY numbers(NOT always multiples of 16 or 4).
+;Note: This function is used to copy source data in src_buffer[i] at beginning
+;of the encoding. The buffer has a width and height of cpi->oxcf.Width and
+;cpi->oxcf.Height, which can be ANY numbers(NOT always multiples of 16 or 4).
 
-;void vp8_yv12_copy_src_frame_func_neon(YV12_BUFFER_CONFIG *src_ybc, YV12_BUFFER_CONFIG *dst_ybc);
+;void vp8_yv12_copy_src_frame_func_neon(const YV12_BUFFER_CONFIG *src_ybc,
+;                                       YV12_BUFFER_CONFIG *dst_ybc);
 
 |vp8_yv12_copy_src_frame_func_neon| PROC
     push            {r4 - r11, lr}

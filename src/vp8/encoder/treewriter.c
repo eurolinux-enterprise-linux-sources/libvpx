@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -35,4 +36,8 @@ static void cost(
 void vp8_cost_tokens(int *c, const vp8_prob *p, vp8_tree t)
 {
     cost(c, t, p, 0, 0);
+}
+void vp8_cost_tokens2(int *c, const vp8_prob *p, vp8_tree t,int start)
+{
+    cost(c, t, p, start, 0);
 }

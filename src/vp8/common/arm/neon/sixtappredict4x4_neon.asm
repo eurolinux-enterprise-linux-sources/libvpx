@@ -1,19 +1,31 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
-    EXPORT  |vp8_sixtap_predict_neon|
+    EXPORT  |vp8_sixtap_predict4x4_neon|
     ARM
     REQUIRE8
     PRESERVE8
 
     AREA ||.text||, CODE, READONLY, ALIGN=2
+
+filter4_coeff
+    DCD     0,  0,  128,    0,   0,  0,   0,  0
+    DCD     0, -6,  123,   12,  -1,  0,   0,  0
+    DCD     2, -11, 108,   36,  -8,  1,   0,  0
+    DCD     0, -9,   93,   50,  -6,  0,   0,  0
+    DCD     3, -16,  77,   77, -16,  3,   0,  0
+    DCD     0, -6,   50,   93,  -9,  0,   0,  0
+    DCD     1, -8,   36,  108, -11,  2,   0,  0
+    DCD     0, -1,   12,  123,  -6,   0,  0,  0
+
 ; r0    unsigned char  *src_ptr,
 ; r1    int  src_pixels_per_line,
 ; r2    int  xoffset,
@@ -21,10 +33,10 @@
 ; stack(r4) unsigned char *dst_ptr,
 ; stack(lr) int  dst_pitch
 
-|vp8_sixtap_predict_neon| PROC
+|vp8_sixtap_predict4x4_neon| PROC
     push            {r4, lr}
 
-    ldr             r12, _filter4_coeff_
+    adr             r12, filter4_coeff
     ldr             r4, [sp, #8]            ;load parameters from stack
     ldr             lr, [sp, #12]           ;load parameters from stack
 
@@ -406,20 +418,5 @@ secondpass_filter4x4_only
     ENDP
 
 ;-----------------
-    AREA    subpelfilters4_dat, DATA, READWRITE         ;read/write by default
-;Data section with name data_area is specified. DCD reserves space in memory for 48 data.
-;One word each is reserved. Label filter_coeff can be used to access the data.
-;Data address: filter_coeff, filter_coeff+4, filter_coeff+8 ...
-_filter4_coeff_
-    DCD     filter4_coeff
-filter4_coeff
-    DCD     0,  0,  128,    0,   0,  0,   0,  0
-    DCD     0, -6,  123,   12,  -1,  0,   0,  0
-    DCD     2, -11, 108,   36,  -8,  1,   0,  0
-    DCD     0, -9,   93,   50,  -6,  0,   0,  0
-    DCD     3, -16,  77,   77, -16,  3,   0,  0
-    DCD     0, -6,   50,   93,  -9,  0,   0,  0
-    DCD     1, -8,   36,  108, -11,  2,   0,  0
-    DCD     0, -1,   12,  123,  -6,   0,  0,  0
 
     END

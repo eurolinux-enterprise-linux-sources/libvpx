@@ -1,67 +1,59 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
-#include "onyxc_int.h"
+#include "./vpx_scale_rtcd.h"
+#include "vp8/common/onyxc_int.h"
 #include "onyx_int.h"
 #include "quantize.h"
 #include "vpx_mem/vpx_mem.h"
-#include "vpx_scale/yv12extend.h"
-#include "vpx_scale/vpxscale.h"
-#include "alloccommon.h"
-
-extern void vp8_loop_filter_frame(VP8_COMMON *cm,    MACROBLOCKD *mbd,  int filt_val);
-extern void vp8_loop_filter_frame_yonly(VP8_COMMON *cm,    MACROBLOCKD *mbd,  int filt_val, int sharpness_lvl);
-extern int vp8_calc_ss_err(YV12_BUFFER_CONFIG *source, YV12_BUFFER_CONFIG *dest, const vp8_variance_rtcd_vtable_t *rtcd);
-#if HAVE_ARMV7
-extern void vp8_yv12_copy_frame_yonly_no_extend_frame_borders_neon(YV12_BUFFER_CONFIG *src_ybc, YV12_BUFFER_CONFIG *dst_ybc);
+#include "vpx_scale/vpx_scale.h"
+#include "vp8/common/alloccommon.h"
+#include "vp8/common/loopfilter.h"
+#if ARCH_ARM
+#include "vpx_ports/arm.h"
 #endif
 
-#if CONFIG_RUNTIME_CPU_DETECT
-#define IF_RTCD(x) (x)
-#else
-#define IF_RTCD(x) NULL
-#endif
+extern int vp8_calc_ss_err(YV12_BUFFER_CONFIG *source, YV12_BUFFER_CONFIG *dest);
 
-extern void
-(*vp8_yv12_copy_partial_frame_ptr)(YV12_BUFFER_CONFIG *src_ybc,
-                                   YV12_BUFFER_CONFIG *dst_ybc,
-                                   int Fraction);
-void
-vp8_yv12_copy_partial_frame(YV12_BUFFER_CONFIG *src_ybc, YV12_BUFFER_CONFIG *dst_ybc, int Fraction)
+void vp8_yv12_copy_partial_frame_c(YV12_BUFFER_CONFIG *src_ybc,
+                                   YV12_BUFFER_CONFIG *dst_ybc)
 {
     unsigned char *src_y, *dst_y;
     int yheight;
     int ystride;
-    int border;
     int yoffset;
     int linestocopy;
 
-    border   = src_ybc->border;
     yheight  = src_ybc->y_height;
     ystride  = src_ybc->y_stride;
 
-    linestocopy = (yheight >> (Fraction + 4));
+    /* number of MB rows to use in partial filtering */
+    linestocopy = (yheight >> 4) / PARTIAL_FRAME_FRACTION;
+    linestocopy = linestocopy ? linestocopy << 4 : 16;     /* 16 lines per MB */
 
-    if (linestocopy < 1)
-        linestocopy = 1;
-
-    linestocopy <<= 4;
-
-    yoffset  = ystride * ((yheight >> 5) * 16 - 8);
+    /* Copy extra 4 so that full filter context is available if filtering done
+     * on the copied partial frame and not original. Partial filter does mb
+     * filtering for top row also, which can modify3 pixels above.
+     */
+    linestocopy += 4;
+    /* partial image starts at ~middle of frame (macroblock border)*/
+    yoffset  = ystride * (((yheight >> 5) * 16) - 4);
     src_y = src_ybc->y_buffer + yoffset;
     dst_y = dst_ybc->y_buffer + yoffset;
 
-    vpx_memcpy(dst_y, src_y, ystride *(linestocopy + 16));
+    vpx_memcpy(dst_y, src_y, ystride * linestocopy);
 }
 
-static int vp8_calc_partial_ssl_err(YV12_BUFFER_CONFIG *source, YV12_BUFFER_CONFIG *dest, int Fraction, const vp8_variance_rtcd_vtable_t *rtcd)
+static int calc_partial_ssl_err(YV12_BUFFER_CONFIG *source,
+                                YV12_BUFFER_CONFIG *dest)
 {
     int i, j;
     int Total = 0;
@@ -69,28 +61,31 @@ static int vp8_calc_partial_ssl_err(YV12_BUFFER_CONFIG *source, YV12_BUFFER_CONF
     unsigned char *src = source->y_buffer;
     unsigned char *dst = dest->y_buffer;
 
-    int linestocopy = (source->y_height >> (Fraction + 4));
-    (void)rtcd;
+    int linestocopy;
 
-    if (linestocopy < 1)
-        linestocopy = 1;
-
-    linestocopy <<= 4;
+    /* number of MB rows to use in partial filtering */
+    linestocopy = (source->y_height >> 4) / PARTIAL_FRAME_FRACTION;
+    linestocopy = linestocopy ? linestocopy << 4 : 16;     /* 16 lines per MB */
 
 
-    srcoffset = source->y_stride   * (dest->y_height >> 5) * 16;
-    dstoffset = dest->y_stride     * (dest->y_height >> 5) * 16;
+    /* partial image starts at ~middle of frame (macroblock border)*/
+    srcoffset = source->y_stride * ((dest->y_height >> 5) * 16);
+    dstoffset = dest->y_stride   * ((dest->y_height >> 5) * 16);
 
     src += srcoffset;
     dst += dstoffset;
 
-    // Loop through the Y plane raw and reconstruction data summing (square differences)
+    /* Loop through the Y plane raw and reconstruction data summing
+     * (square differences)
+     */
     for (i = 0; i < linestocopy; i += 16)
     {
         for (j = 0; j < source->y_width; j += 16)
         {
             unsigned int sse;
-            Total += VARIANCE_INVOKE(rtcd, mse16x16)(src + j, source->y_stride, dst + j, dest->y_stride, &sse);
+            Total += vp8_mse16x16(src + j, source->y_stride,
+                                                     dst + j, dest->y_stride,
+                                                     &sse);
         }
 
         src += 16 * source->y_stride;
@@ -100,21 +95,13 @@ static int vp8_calc_partial_ssl_err(YV12_BUFFER_CONFIG *source, YV12_BUFFER_CONF
     return Total;
 }
 
-extern void vp8_loop_filter_partial_frame
-(
-    VP8_COMMON *cm,
-    MACROBLOCKD *mbd,
-    int default_filt_lvl,
-    int sharpness_lvl,
-    int Fraction
-);
-
-// Enforce a minimum filter level based upon baseline Q
+/* Enforce a minimum filter level based upon baseline Q */
 static int get_min_filter_level(VP8_COMP *cpi, int base_qindex)
 {
     int min_filter_level;
 
-    if (cpi->source_alt_ref_active && cpi->common.refresh_golden_frame && !cpi->common.refresh_alt_ref_frame)
+    if (cpi->source_alt_ref_active && cpi->common.refresh_golden_frame &&
+        !cpi->common.refresh_alt_ref_frame)
         min_filter_level = 0;
     else
     {
@@ -129,20 +116,19 @@ static int get_min_filter_level(VP8_COMP *cpi, int base_qindex)
     return min_filter_level;
 }
 
-// Enforce a maximum filter level based upon baseline Q
+/* Enforce a maximum filter level based upon baseline Q */
 static int get_max_filter_level(VP8_COMP *cpi, int base_qindex)
 {
-    // PGW August 2006: Highest filter values almost always a bad idea
+    /* PGW August 2006: Highest filter values almost always a bad idea */
 
-    // jbb chg: 20100118 - not so any more with this overquant stuff allow high values
-    // with lots of intra coming in.
-    int max_filter_level = MAX_LOOP_FILTER ;//* 3 / 4;
+    /* jbb chg: 20100118 - not so any more with this overquant stuff allow
+     * high values with lots of intra coming in.
+     */
+    int max_filter_level = MAX_LOOP_FILTER;
+    (void)base_qindex;
 
-    if (cpi->section_intra_rating > 8)
+    if (cpi->twopass.section_intra_rating > 8)
         max_filter_level = MAX_LOOP_FILTER * 3 / 4;
-
-    (void) cpi;
-    (void) base_qindex;
 
     return max_filter_level;
 }
@@ -153,25 +139,29 @@ void vp8cx_pick_filter_level_fast(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
 
     int best_err = 0;
     int filt_err = 0;
-    int min_filter_level = 0;
-    int max_filter_level = MAX_LOOP_FILTER * 3 / 4;   // PGW August 2006: Highest filter values almost always a bad idea
+    int min_filter_level = get_min_filter_level(cpi, cm->base_qindex);
+    int max_filter_level = get_max_filter_level(cpi, cm->base_qindex);
     int filt_val;
     int best_filt_val = cm->filter_level;
+    YV12_BUFFER_CONFIG * saved_frame = cm->frame_to_show;
 
-    //  Make a copy of the unfiltered / processed recon buffer
-    //vp8_yv12_copy_frame_ptr( cm->frame_to_show, &cpi->last_frame_uf  );
-    vp8_yv12_copy_partial_frame_ptr(cm->frame_to_show, &cpi->last_frame_uf, 3);
+    /* Replace unfiltered frame buffer with a new one */
+    cm->frame_to_show = &cpi->pick_lf_lvl_frame;
 
     if (cm->frame_type == KEY_FRAME)
         cm->sharpness_level = 0;
     else
         cm->sharpness_level = cpi->oxcf.Sharpness;
 
-    // Enforce a minimum filter level based upon Q
-    min_filter_level = get_min_filter_level(cpi, cm->base_qindex);
-    max_filter_level = get_max_filter_level(cpi, cm->base_qindex);
+    if (cm->sharpness_level != cm->last_sharpness_level)
+    {
+        vp8_loop_filter_update_sharpness(&cm->lf_info, cm->sharpness_level);
+        cm->last_sharpness_level = cm->sharpness_level;
+    }
 
-    // Start the search at the previous frame filter level unless it is now out of range.
+    /* Start the search at the previous frame filter level unless it is
+     * now out of range.
+     */
     if (cm->filter_level < min_filter_level)
         cm->filter_level = min_filter_level;
     else if (cm->filter_level > max_filter_level)
@@ -180,39 +170,27 @@ void vp8cx_pick_filter_level_fast(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
     filt_val = cm->filter_level;
     best_filt_val = filt_val;
 
-    // Set up alternate filter values
+    /* Get the err using the previous frame's filter value. */
 
-    // Get the err using the previous frame's filter value.
-    vp8_loop_filter_partial_frame(cm, &cpi->mb.e_mbd, filt_val, 0  , 3);
-    cm->last_frame_type = cm->frame_type;
-    cm->last_filter_type = cm->filter_type;
-    cm->last_sharpness_level = cm->sharpness_level;
+    /* Copy the unfiltered / processed recon buffer to the new buffer */
+    vp8_yv12_copy_partial_frame(saved_frame, cm->frame_to_show);
+    vp8_loop_filter_partial_frame(cm, &cpi->mb.e_mbd, filt_val);
 
-    best_err = vp8_calc_partial_ssl_err(sd, cm->frame_to_show, 3, IF_RTCD(&cpi->rtcd.variance));
+    best_err = calc_partial_ssl_err(sd, cm->frame_to_show);
 
-    //  Re-instate the unfiltered frame
-    vp8_yv12_copy_partial_frame_ptr(&cpi->last_frame_uf, cm->frame_to_show, 3);
+    filt_val -= 1 + (filt_val > 10);
 
-    filt_val -= (1 + ((filt_val > 10) ? 1 : 0));
-
-    // Search lower filter levels
+    /* Search lower filter levels */
     while (filt_val >= min_filter_level)
     {
-        // Apply the loop filter
-        vp8_loop_filter_partial_frame(cm, &cpi->mb.e_mbd, filt_val, 0, 3);
-        cm->last_frame_type = cm->frame_type;
-        cm->last_filter_type = cm->filter_type;
-        cm->last_sharpness_level = cm->sharpness_level;
+        /* Apply the loop filter */
+        vp8_yv12_copy_partial_frame(saved_frame, cm->frame_to_show);
+        vp8_loop_filter_partial_frame(cm, &cpi->mb.e_mbd, filt_val);
 
-        // Get the err for filtered frame
-        filt_err = vp8_calc_partial_ssl_err(sd, cm->frame_to_show, 3, IF_RTCD(&cpi->rtcd.variance));
+        /* Get the err for filtered frame */
+        filt_err = calc_partial_ssl_err(sd, cm->frame_to_show);
 
-
-        //  Re-instate the unfiltered frame
-        vp8_yv12_copy_partial_frame_ptr(&cpi->last_frame_uf, cm->frame_to_show, 3);
-
-
-        // Update the best case record or exit loop.
+        /* Update the best case record or exit loop. */
         if (filt_err < best_err)
         {
             best_err = filt_err;
@@ -221,36 +199,34 @@ void vp8cx_pick_filter_level_fast(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
         else
             break;
 
-        // Adjust filter level
-        filt_val -= (1 + ((filt_val > 10) ? 1 : 0));
+        /* Adjust filter level */
+        filt_val -= 1 + (filt_val > 10);
     }
 
-    // Search up (note that we have already done filt_val = cm->filter_level)
-    filt_val = cm->filter_level + (1 + ((filt_val > 10) ? 1 : 0));
+    /* Search up (note that we have already done filt_val = cm->filter_level) */
+    filt_val = cm->filter_level + 1 + (filt_val > 10);
 
     if (best_filt_val == cm->filter_level)
     {
-        // Resist raising filter level for very small gains
+        /* Resist raising filter level for very small gains */
         best_err -= (best_err >> 10);
 
         while (filt_val < max_filter_level)
         {
-            // Apply the loop filter
-            vp8_loop_filter_partial_frame(cm, &cpi->mb.e_mbd, filt_val, 0, 3);
-            cm->last_frame_type = cm->frame_type;
-            cm->last_filter_type = cm->filter_type;
-            cm->last_sharpness_level = cm->sharpness_level;
+            /* Apply the loop filter */
+            vp8_yv12_copy_partial_frame(saved_frame, cm->frame_to_show);
 
-            // Get the err for filtered frame
-            filt_err = vp8_calc_partial_ssl_err(sd, cm->frame_to_show, 3, IF_RTCD(&cpi->rtcd.variance));
+            vp8_loop_filter_partial_frame(cm, &cpi->mb.e_mbd, filt_val);
 
-            //  Re-instate the unfiltered frame
-            vp8_yv12_copy_partial_frame_ptr(&cpi->last_frame_uf, cm->frame_to_show, 3);
+            /* Get the err for filtered frame */
+            filt_err = calc_partial_ssl_err(sd, cm->frame_to_show);
 
-            // Update the best case record or exit loop.
+            /* Update the best case record or exit loop. */
             if (filt_err < best_err)
             {
-                // Do not raise filter level if improvement is < 1 part in 4096
+                /* Do not raise filter level if improvement is < 1 part
+                 * in 4096
+                 */
                 best_err = filt_err - (filt_err >> 10);
 
                 best_filt_val = filt_val;
@@ -258,8 +234,8 @@ void vp8cx_pick_filter_level_fast(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
             else
                 break;
 
-            // Adjust filter level
-            filt_val += (1 + ((filt_val > 10) ? 1 : 0));
+            /* Adjust filter level */
+            filt_val += 1 + (filt_val > 10);
         }
     }
 
@@ -270,9 +246,12 @@ void vp8cx_pick_filter_level_fast(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
 
     if (cm->filter_level > max_filter_level)
         cm->filter_level = max_filter_level;
+
+    /* restore unfiltered frame pointer */
+    cm->frame_to_show = saved_frame;
 }
 
-// Stub function for now Alt LF not used
+/* Stub function for now Alt LF not used */
 void vp8cx_set_alt_lf_level(VP8_COMP *cpi, int filt_val)
 {
     MACROBLOCKD *mbd = &cpi->mb.e_mbd;
@@ -290,36 +269,37 @@ void vp8cx_pick_filter_level(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
 
     int best_err = 0;
     int filt_err = 0;
-    int min_filter_level;
-    int max_filter_level;
-    int prediction_difference = (int)(100 * abs((int)(cpi->last_auto_filter_prediction_error - cpi->prediction_error)) / (1 + cpi->prediction_error));
+    int min_filter_level = get_min_filter_level(cpi, cm->base_qindex);
+    int max_filter_level = get_max_filter_level(cpi, cm->base_qindex);
 
     int filter_step;
     int filt_high = 0;
-    int filt_mid = cm->filter_level;      // Start search at previous frame filter level
+    /* Start search at previous frame filter level */
+    int filt_mid = cm->filter_level;
     int filt_low = 0;
     int filt_best;
     int filt_direction = 0;
 
-    int Bias = 0;                       // Bias against raising loop filter and in favour of lowering it
+    /* Bias against raising loop filter and in favor of lowering it */
+    int Bias = 0;
 
-    //  Make a copy of the unfiltered / processed recon buffer
-#if HAVE_ARMV7
-    vp8_yv12_copy_frame_yonly_no_extend_frame_borders_neon(cm->frame_to_show, &cpi->last_frame_uf);
-#else
-    vp8_yv12_copy_frame_ptr(cm->frame_to_show, &cpi->last_frame_uf);
-#endif
+    int ss_err[MAX_LOOP_FILTER + 1];
+
+    YV12_BUFFER_CONFIG * saved_frame = cm->frame_to_show;
+
+    vpx_memset(ss_err, 0, sizeof(ss_err));
+
+    /* Replace unfiltered frame buffer with a new one */
+    cm->frame_to_show = &cpi->pick_lf_lvl_frame;
 
     if (cm->frame_type == KEY_FRAME)
         cm->sharpness_level = 0;
     else
         cm->sharpness_level = cpi->oxcf.Sharpness;
 
-    // Enforce a minimum filter level based upon Q
-    min_filter_level = get_min_filter_level(cpi, cm->base_qindex);
-    max_filter_level = get_max_filter_level(cpi, cm->base_qindex);
-
-    // Start the search at the previous frame filter level unless it is now out of range.
+    /* Start the search at the previous frame filter level unless it is
+     * now out of range.
+     */
     filt_mid = cm->filter_level;
 
     if (filt_mid < min_filter_level)
@@ -327,59 +307,54 @@ void vp8cx_pick_filter_level(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
     else if (filt_mid > max_filter_level)
         filt_mid = max_filter_level;
 
-    // Define the initial step size
+    /* Define the initial step size */
     filter_step = (filt_mid < 16) ? 4 : filt_mid / 4;
 
-    // Get baseline error score
+    /* Get baseline error score */
+
+    /* Copy the unfiltered / processed recon buffer to the new buffer */
+    vpx_yv12_copy_y(saved_frame, cm->frame_to_show);
+
     vp8cx_set_alt_lf_level(cpi, filt_mid);
-    vp8_loop_filter_frame_yonly(cm, &cpi->mb.e_mbd, filt_mid, 0);
-    cm->last_frame_type = cm->frame_type;
-    cm->last_filter_type = cm->filter_type;
-    cm->last_sharpness_level = cm->sharpness_level;
+    vp8_loop_filter_frame_yonly(cm, &cpi->mb.e_mbd, filt_mid);
 
-    best_err = vp8_calc_ss_err(sd, cm->frame_to_show, IF_RTCD(&cpi->rtcd.variance));
+    best_err = vp8_calc_ss_err(sd, cm->frame_to_show);
+
+    ss_err[filt_mid] = best_err;
+
     filt_best = filt_mid;
-
-    //  Re-instate the unfiltered frame
-#if HAVE_ARMV7
-    vp8_yv12_copy_frame_yonly_no_extend_frame_borders_neon(&cpi->last_frame_uf, cm->frame_to_show);
-#else
-    vp8_yv12_copy_frame_yonly_ptr(&cpi->last_frame_uf, cm->frame_to_show);
-#endif
 
     while (filter_step > 0)
     {
-        Bias = (best_err >> (15 - (filt_mid / 8))) * filter_step; //PGW change 12/12/06 for small images
+        Bias = (best_err >> (15 - (filt_mid / 8))) * filter_step;
 
-        // jbb chg: 20100118 - in sections with lots of new material coming in don't bias as much to a low filter value
-        if (cpi->section_intra_rating < 20)
-            Bias = Bias * cpi->section_intra_rating / 20;
+        if (cpi->twopass.section_intra_rating < 20)
+            Bias = Bias * cpi->twopass.section_intra_rating / 20;
 
         filt_high = ((filt_mid + filter_step) > max_filter_level) ? max_filter_level : (filt_mid + filter_step);
         filt_low = ((filt_mid - filter_step) < min_filter_level) ? min_filter_level : (filt_mid - filter_step);
 
         if ((filt_direction <= 0) && (filt_low != filt_mid))
         {
-            // Get Low filter error score
-            vp8cx_set_alt_lf_level(cpi, filt_low);
-            vp8_loop_filter_frame_yonly(cm, &cpi->mb.e_mbd, filt_low, 0);
-            cm->last_frame_type = cm->frame_type;
-            cm->last_filter_type = cm->filter_type;
-            cm->last_sharpness_level = cm->sharpness_level;
+            if(ss_err[filt_low] == 0)
+            {
+                /* Get Low filter error score */
+                vpx_yv12_copy_y(saved_frame, cm->frame_to_show);
+                vp8cx_set_alt_lf_level(cpi, filt_low);
+                vp8_loop_filter_frame_yonly(cm, &cpi->mb.e_mbd, filt_low);
 
-            filt_err = vp8_calc_ss_err(sd, cm->frame_to_show, IF_RTCD(&cpi->rtcd.variance));
+                filt_err = vp8_calc_ss_err(sd, cm->frame_to_show);
+                ss_err[filt_low] = filt_err;
+            }
+            else
+                filt_err = ss_err[filt_low];
 
-            //  Re-instate the unfiltered frame
-#if HAVE_ARMV7
-            vp8_yv12_copy_frame_yonly_no_extend_frame_borders_neon(&cpi->last_frame_uf, cm->frame_to_show);
-#else
-            vp8_yv12_copy_frame_yonly_ptr(&cpi->last_frame_uf, cm->frame_to_show);
-#endif
-
-            // If value is close to the best so far then bias towards a lower loop filter value.
+            /* If value is close to the best so far then bias towards a
+             * lower loop filter value.
+             */
             if ((filt_err - Bias) < best_err)
             {
-                // Was it actually better than the previous best?
+                /* Was it actually better than the previous best? */
                 if (filt_err < best_err)
                     best_err = filt_err;
 
@@ -387,25 +362,22 @@ void vp8cx_pick_filter_level(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
             }
         }
 
-        // Now look at filt_high
+        /* Now look at filt_high */
         if ((filt_direction >= 0) && (filt_high != filt_mid))
         {
-            vp8cx_set_alt_lf_level(cpi, filt_high);
-            vp8_loop_filter_frame_yonly(cm, &cpi->mb.e_mbd, filt_high, 0);
-            cm->last_frame_type = cm->frame_type;
-            cm->last_filter_type = cm->filter_type;
-            cm->last_sharpness_level = cm->sharpness_level;
+            if(ss_err[filt_high] == 0)
+            {
+                vpx_yv12_copy_y(saved_frame, cm->frame_to_show);
+                vp8cx_set_alt_lf_level(cpi, filt_high);
+                vp8_loop_filter_frame_yonly(cm, &cpi->mb.e_mbd, filt_high);
 
-            filt_err = vp8_calc_ss_err(sd, cm->frame_to_show, IF_RTCD(&cpi->rtcd.variance));
+                filt_err = vp8_calc_ss_err(sd, cm->frame_to_show);
+                ss_err[filt_high] = filt_err;
+            }
+            else
+                filt_err = ss_err[filt_high];
 
-            //  Re-instate the unfiltered frame
-#if HAVE_ARMV7
-            vp8_yv12_copy_frame_yonly_no_extend_frame_borders_neon(&cpi->last_frame_uf, cm->frame_to_show);
-#else
-            vp8_yv12_copy_frame_yonly_ptr(&cpi->last_frame_uf, cm->frame_to_show);
-#endif
-
-            // Was it better than the previous best?
+            /* Was it better than the previous best? */
             if (filt_err < (best_err - Bias))
             {
                 best_err = filt_err;
@@ -413,7 +385,9 @@ void vp8cx_pick_filter_level(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
             }
         }
 
-        // Half the step distance if the best filter value was the same as last time
+        /* Half the step distance if the best filter value was the same
+         * as last time
+         */
         if (filt_best == filt_mid)
         {
             filter_step = filter_step / 2;
@@ -427,9 +401,7 @@ void vp8cx_pick_filter_level(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
     }
 
     cm->filter_level = filt_best;
-    cpi->last_auto_filt_val = filt_best;
-    cpi->last_auto_filt_q  = cm->base_qindex;
 
-    cpi->last_auto_filter_prediction_error = cpi->prediction_error;
-    cpi->frames_since_auto_filter = 0;
+    /* restore unfiltered frame pointer */
+    cm->frame_to_show = saved_frame;
 }

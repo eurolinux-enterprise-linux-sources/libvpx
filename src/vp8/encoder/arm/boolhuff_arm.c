@@ -1,15 +1,16 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
-#include "boolhuff.h"
-#include "blockd.h"
+#include "vp8/encoder/boolhuff.h"
+#include "vpx/internal/vpx_codec_internal.h"
 
 const unsigned int vp8_prob_cost[256] =
 {
@@ -31,3 +32,10 @@ const unsigned int vp8_prob_cost[256] =
     22,   21,   19,   18,   16,   15,   13,   12,   10,    9,    7,    6,    4,    3,    1,   1
 };
 
+int vp8_validate_buffer_arm(const unsigned char *start,
+                            size_t               len,
+                            const unsigned char *end,
+                            struct vpx_internal_error_info *error)
+{
+    return validate_buffer(start, len, end, error);
+}

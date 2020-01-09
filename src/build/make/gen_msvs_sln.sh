@@ -1,11 +1,12 @@
 #!/bin/bash
 ##
-##  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+##  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ##
-##  Use of this source code is governed by a BSD-style license and patent
-##  grant that can be found in the LICENSE file in the root of the source
-##  tree. All contributing project authors may be found in the AUTHORS
-##  file in the root of the source tree.
+##  Use of this source code is governed by a BSD-style license
+##  that can be found in the LICENSE file in the root of the source
+##  tree. An additional intellectual property rights grant can be found
+##  in the file PATENTS.  All contributing project authors may
+##  be found in the AUTHORS file in the root of the source tree.
 ##
 
 
@@ -24,7 +25,7 @@ files.
 Options:
     --help                      Print this message
     --out=outfile               Redirect output to a file
-    --ver=version               Version (7,8) of visual studio to generate for
+    --ver=version               Version (7,8,9,10,11) of visual studio to generate for
     --target=isa-os-cc          Target specifier
 EOF
     exit 1
@@ -54,22 +55,38 @@ indent_pop() {
 
 parse_project() {
     local file=$1
-    local name=`grep Name "$file" | awk 'BEGIN {FS="\""}{if (NR==1) print $2}'`
-    local guid=`grep ProjectGUID "$file" | awk 'BEGIN {FS="\""}{if (NR==1) print $2}'`
+    if [ "$sfx" = "vcproj" ]; then
+        local name=`grep Name "$file" | awk 'BEGIN {FS="\""}{if (NR==1) print $2}'`
+        local guid=`grep ProjectGUID "$file" | awk 'BEGIN {FS="\""}{if (NR==1) print $2}'`
+    else
+        local name=`grep RootNamespace "$file" | sed 's,.*<.*>\(.*\)</.*>.*,\1,'`
+        local guid=`grep ProjectGuid "$file" | sed 's,.*<.*>\(.*\)</.*>.*,\1,'`
+    fi
 
     # save the project GUID to a varaible, normalizing to the basename of the
     # vcproj file without the extension
     local var
     var=${file##*/}
-    var=${var%%.vcproj}
+    var=${var%%.${sfx}}
     eval "${var}_file=\"$1\""
     eval "${var}_name=$name"
     eval "${var}_guid=$guid"
 
-    # assume that all projects have the same list of possible configurations,
-    # so overwriting old config_lists is not a problem
-    config_list=`grep -A1 '<Configuration' $file |
-        grep Name | cut -d\" -f2`
+    if [ "$sfx" = "vcproj" ]; then
+        cur_config_list=`grep -A1 '<Configuration' $file |
+            grep Name | cut -d\" -f2`
+    else
+        cur_config_list=`grep -B1 'Label="Configuration"' $file |
+            grep Condition | cut -d\' -f4`
+    fi
+    new_config_list=$(for i in $config_list $cur_config_list; do
+        echo $i
+    done | sort | uniq)
+    if [ "$config_list" != "" ] && [ "$config_list" != "$new_config_list" ]; then
+        mixed_platforms=1
+    fi
+    config_list="$new_config_list"
+    eval "${var}_config_list=\"$cur_config_list\""
     proj_list="${proj_list} ${var}"
 }
 
@@ -82,14 +99,14 @@ process_project() {
     # vcproj file without the extension
     local var
     var=${file##*/}
-    var=${var%%.vcproj}
+    var=${var%%.${sfx}}
     eval "${var}_guid=$guid"
 
     echo "Project(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"$name\", \"$file\", \"$guid\""
     indent_push
 
     eval "local deps=\"\${${var}_deps}\""
-    if [ -n "$deps" ]; then
+    if [ -n "$deps" ] && [ "$sfx" = "vcproj" ]; then
         echo "${indent}ProjectSection(ProjectDependencies) = postProject"
         indent_push
 
@@ -119,6 +136,11 @@ process_global() {
     indent_push
     IFS_bak=${IFS}
     IFS=$'\r'$'\n'
+    if [ "$mixed_platforms" != "" ]; then
+        config_list="
+Release|Mixed Platforms
+Debug|Mixed Platforms"
+    fi
     for config in ${config_list}; do
         echo "${indent}$config = $config"
     done
@@ -133,14 +155,18 @@ process_global() {
     indent_push
     for proj in ${proj_list}; do
         eval "local proj_guid=\${${proj}_guid}"
+        eval "local proj_config_list=\${${proj}_config_list}"
         IFS=$'\r'$'\n'
-        for config in ${config_list}; do
-            echo "${indent}${proj_guid}.${config}.ActiveCfg = ${config}"
-            echo "${indent}${proj_guid}.${config}.Build.0 = ${config}"
-
-            if [ "$target" == "armv6-wince-vs8" ] || [ "$target" == "armv5te-wince-vs8" ] || [ "$target" == "iwmmxt-wince-vs8" ] || [ "$target" == "iwmmxt2-wince-vs8" ];then
-                echo "${indent}${proj_guid}.${config}.Deploy.0 = ${config}"
+        for config in ${proj_config_list}; do
+            if [ "$mixed_platforms" != "" ]; then
+                local c=${config%%|*}
+                echo "${indent}${proj_guid}.${c}|Mixed Platforms.ActiveCfg = ${config}"
+                echo "${indent}${proj_guid}.${c}|Mixed Platforms.Build.0 = ${config}"
+            else
+                echo "${indent}${proj_guid}.${config}.ActiveCfg = ${config}"
+                echo "${indent}${proj_guid}.${config}.Build.0 = ${config}"
             fi
+
         done
         IFS=${IFS_bak}
     done
@@ -165,9 +191,14 @@ process_makefile() {
     IFS=$'\r'$'\n'
     local TAB=$'\t'
     cat <<EOF
-found_devenv := \$(shell which devenv.com >/dev/null 2>&1 && echo yes)
+ifeq (\$(CONFIG_VS_VERSION),7)
+MSBUILD_TOOL := devenv.com
+else
+MSBUILD_TOOL := msbuild.exe
+endif
+found_devenv := \$(shell which \$(MSBUILD_TOOL) >/dev/null 2>&1 && echo yes)
 .nodevenv.once:
-${TAB}@echo "  * devenv.com not found in path."
+${TAB}@echo "  * \$(MSBUILD_TOOL) not found in path."
 ${TAB}@echo "  * "
 ${TAB}@echo "  * You will have to build all configurations manually using the"
 ${TAB}@echo "  * Visual Studio IDE. To allow make to build them automatically,"
@@ -192,16 +223,17 @@ ${TAB}rm -rf "$platform"/"$config"
 ifneq (\$(found_devenv),)
   ifeq (\$(CONFIG_VS_VERSION),7)
 $nows_sln_config: $outfile
-${TAB}devenv.com $outfile /build "$config"
+${TAB}\$(MSBUILD_TOOL) $outfile -build "$config"
 
   else
 $nows_sln_config: $outfile
-${TAB}devenv.com $outfile /build "$sln_config"
+${TAB}\$(MSBUILD_TOOL) $outfile -m -t:Build \\
+${TAB}${TAB}-p:Configuration="$config" -p:Platform="$platform"
 
   endif
 else
 $nows_sln_config: $outfile .nodevenv.once
-${TAB}@echo "  * Skipping build of $sln_config (devenv.com not in path)."
+${TAB}@echo "  * Skipping build of $sln_config (\$(MSBUILD_TOOL) not in path)."
 ${TAB}@echo "  * "
 endif
 
@@ -223,7 +255,7 @@ for opt in "$@"; do
     ;;
     --ver=*) vs_ver="$optval"
              case $optval in
-             [78])
+             [789]|10|11|12)
              ;;
              *) die Unrecognized Visual Studio Version in $opt
              ;;
@@ -234,7 +266,7 @@ for opt in "$@"; do
              7) sln_vers="8.00"
                 sln_vers_str="Visual Studio .NET 2003"
              ;;
-             8)
+             [89])
              ;;
              *) die "Unrecognized Visual Studio Version '$optval' in $opt"
              ;;
@@ -255,6 +287,26 @@ case "${vs_ver:-8}" in
     ;;
     8) sln_vers="9.00"
        sln_vers_str="Visual Studio 2005"
+    ;;
+    9) sln_vers="10.00"
+       sln_vers_str="Visual Studio 2008"
+    ;;
+    10) sln_vers="11.00"
+       sln_vers_str="Visual Studio 2010"
+    ;;
+    11) sln_vers="12.00"
+       sln_vers_str="Visual Studio 2012"
+    ;;
+    12) sln_vers="12.00"
+       sln_vers_str="Visual Studio 2013"
+    ;;
+esac
+case "${vs_ver:-8}" in
+    [789])
+    sfx=vcproj
+    ;;
+    10|11|12)
+    sfx=vcxproj
     ;;
 esac
 

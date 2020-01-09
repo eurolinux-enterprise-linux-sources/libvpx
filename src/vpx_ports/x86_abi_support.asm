@@ -1,10 +1,11 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
@@ -21,6 +22,8 @@
 %define ABI_IS_32BIT 1
 %elifidn __OUTPUT_FORMAT__,win32
 %define ABI_IS_32BIT 1
+%elifidn __OUTPUT_FORMAT__,aout
+%define ABI_IS_32BIT 1
 %else
 %define ABI_IS_32BIT 0
 %endif
@@ -35,8 +38,56 @@
 %define rsp esp
 %define rbp ebp
 %define movsxd mov
+%macro movq 2
+  %ifidn %1,eax
+    movd %1,%2
+  %elifidn %2,eax
+    movd %1,%2
+  %elifidn %1,ebx
+    movd %1,%2
+  %elifidn %2,ebx
+    movd %1,%2
+  %elifidn %1,ecx
+    movd %1,%2
+  %elifidn %2,ecx
+    movd %1,%2
+  %elifidn %1,edx
+    movd %1,%2
+  %elifidn %2,edx
+    movd %1,%2
+  %elifidn %1,esi
+    movd %1,%2
+  %elifidn %2,esi
+    movd %1,%2
+  %elifidn %1,edi
+    movd %1,%2
+  %elifidn %2,edi
+    movd %1,%2
+  %elifidn %1,esp
+    movd %1,%2
+  %elifidn %2,esp
+    movd %1,%2
+  %elifidn %1,ebp
+    movd %1,%2
+  %elifidn %2,ebp
+    movd %1,%2
+  %else
+    movq %1,%2
+  %endif
+%endmacro
 %endif
 
+
+; LIBVPX_YASM_WIN64
+; Set LIBVPX_YASM_WIN64 if output is Windows 64bit so the code will work if x64
+; or win64 is defined on the Yasm command line.
+%ifidn __OUTPUT_FORMAT__,win64
+%define LIBVPX_YASM_WIN64 1
+%elifidn __OUTPUT_FORMAT__,x64
+%define LIBVPX_YASM_WIN64 1
+%else
+%define LIBVPX_YASM_WIN64 0
+%endif
 
 ; sym()
 ; Return the proper symbol name for the target ABI.
@@ -48,10 +99,39 @@
 %define sym(x) x
 %elifidn __OUTPUT_FORMAT__,elf64
 %define sym(x) x
-%elifidn __OUTPUT_FORMAT__,x64
+%elifidn __OUTPUT_FORMAT__,elfx32
+%define sym(x) x
+%elif LIBVPX_YASM_WIN64
 %define sym(x) x
 %else
 %define sym(x) _ %+ x
+%endif
+
+;  PRIVATE
+;  Macro for the attribute to hide a global symbol for the target ABI.
+;  This is only active if CHROMIUM is defined.
+;
+;  Chromium doesn't like exported global symbols due to symbol clashing with
+;  plugins among other things.
+;
+;  Requires Chromium's patched copy of yasm:
+;    http://src.chromium.org/viewvc/chrome?view=rev&revision=73761
+;    http://www.tortall.net/projects/yasm/ticket/236
+;
+%ifdef CHROMIUM
+  %ifidn   __OUTPUT_FORMAT__,elf32
+    %define PRIVATE :hidden
+  %elifidn __OUTPUT_FORMAT__,elf64
+    %define PRIVATE :hidden
+  %elifidn __OUTPUT_FORMAT__,elfx32
+    %define PRIVATE :hidden
+  %elif LIBVPX_YASM_WIN64
+    %define PRIVATE
+  %else
+    %define PRIVATE :private_extern
+  %endif
+%else
+  %define PRIVATE
 %endif
 
 ; arg()
@@ -62,7 +142,7 @@
 %else
   ; 64 bit ABI passes arguments in registers. This is a workaround to get up
   ; and running quickly. Relies on SHADOW_ARGS_TO_STACK
-  %ifidn __OUTPUT_FORMAT__,x64
+  %if LIBVPX_YASM_WIN64
     %define arg(x) [rbp+16+8*x]
   %else
     %define arg(x) [rbp-8-8*x]
@@ -89,7 +169,7 @@
 %macro ALIGN_STACK 2
     mov         %2, rsp
     and         rsp, -%1
-    sub         rsp, %1 - REG_SZ_BYTES
+    lea         rsp, [rsp - (%1 - REG_SZ_BYTES)]
     push        %2
 %endmacro
 
@@ -104,51 +184,77 @@
 %idefine XMMWORD
 %idefine MMWORD
 
-
 ; PIC macros
 ;
 %if ABI_IS_32BIT
   %if CONFIG_PIC=1
   %ifidn __OUTPUT_FORMAT__,elf32
+    %define GET_GOT_SAVE_ARG 1
     %define WRT_PLT wrt ..plt
     %macro GET_GOT 1
       extern _GLOBAL_OFFSET_TABLE_
       push %1
       call %%get_got
+      %%sub_offset:
+      jmp %%exitGG
       %%get_got:
-      pop %1
-      add %1, _GLOBAL_OFFSET_TABLE_ + $$ - %%get_got wrt ..gotpc
+      mov %1, [esp]
+      add %1, _GLOBAL_OFFSET_TABLE_ + $$ - %%sub_offset wrt ..gotpc
+      ret
+      %%exitGG:
       %undef GLOBAL
-      %define GLOBAL + %1 wrt ..gotoff
+      %define GLOBAL(x) x + %1 wrt ..gotoff
       %undef RESTORE_GOT
       %define RESTORE_GOT pop %1
     %endmacro
   %elifidn __OUTPUT_FORMAT__,macho32
+    %define GET_GOT_SAVE_ARG 1
     %macro GET_GOT 1
       push %1
       call %%get_got
       %%get_got:
-      pop %1
-      add %1, fake_got - %%get_got
+      pop  %1
       %undef GLOBAL
-      %define GLOBAL + %1 - fake_got
+      %define GLOBAL(x) x + %1 - %%get_got
       %undef RESTORE_GOT
       %define RESTORE_GOT pop %1
     %endmacro
   %endif
   %endif
+
+  %ifdef CHROMIUM
+    %ifidn __OUTPUT_FORMAT__,macho32
+      %define HIDDEN_DATA(x) x:private_extern
+    %else
+      %define HIDDEN_DATA(x) x
+    %endif
+  %else
+    %define HIDDEN_DATA(x) x
+  %endif
 %else
   %macro GET_GOT 1
   %endmacro
-  %define GLOBAL wrt rip
+  %define GLOBAL(x) rel x
   %ifidn __OUTPUT_FORMAT__,elf64
     %define WRT_PLT wrt ..plt
+    %define HIDDEN_DATA(x) x:data hidden
+  %elifidn __OUTPUT_FORMAT__,elfx32
+    %define WRT_PLT wrt ..plt
+    %define HIDDEN_DATA(x) x:data hidden
+  %elifidn __OUTPUT_FORMAT__,macho64
+    %ifdef CHROMIUM
+      %define HIDDEN_DATA(x) x:private_extern
+    %else
+      %define HIDDEN_DATA(x) x
+    %endif
+  %else
+    %define HIDDEN_DATA(x) x
   %endif
 %endif
 %ifnmacro GET_GOT
     %macro GET_GOT 1
     %endmacro
-    %define GLOBAL
+    %define GLOBAL(x) x
 %endif
 %ifndef RESTORE_GOT
 %define RESTORE_GOT
@@ -162,7 +268,7 @@
   %endm
   %define UNSHADOW_ARGS
 %else
-%ifidn __OUTPUT_FORMAT__,x64
+%if LIBVPX_YASM_WIN64
   %macro SHADOW_ARGS_TO_STACK 1 ; argc
     %if %1 > 0
         mov arg(0),rcx
@@ -198,22 +304,65 @@
         push r9
     %endif
     %if %1 > 6
-        mov rax,[rbp+16]
+      %assign i %1-6
+      %assign off 16
+      %rep i
+        mov rax,[rbp+off]
         push rax
-    %endif
-    %if %1 > 7
-        mov rax,[rbp+24]
-        push rax
-    %endif
-    %if %1 > 8
-        mov rax,[rbp+32]
-        push rax
+        %assign off off+8
+      %endrep
     %endif
   %endm
 %endif
   %define UNSHADOW_ARGS mov rsp, rbp
 %endif
 
+; Win64 ABI requires that XMM6:XMM15 are callee saved
+; SAVE_XMM n, [u]
+; store registers 6-n on the stack
+; if u is specified, use unaligned movs.
+; Win64 ABI requires 16 byte stack alignment, but then pushes an 8 byte return
+; value. Typically we follow this up with 'push rbp' - re-aligning the stack -
+; but in some cases this is not done and unaligned movs must be used.
+%if LIBVPX_YASM_WIN64
+%macro SAVE_XMM 1-2 a
+  %if %1 < 6
+    %error Only xmm registers 6-15 must be preserved
+  %else
+    %assign last_xmm %1
+    %define movxmm movdq %+ %2
+    %assign xmm_stack_space ((last_xmm - 5) * 16)
+    sub rsp, xmm_stack_space
+    %assign i 6
+    %rep (last_xmm - 5)
+      movxmm [rsp + ((i - 6) * 16)], xmm %+ i
+      %assign i i+1
+    %endrep
+  %endif
+%endmacro
+%macro RESTORE_XMM 0
+  %ifndef last_xmm
+    %error RESTORE_XMM must be paired with SAVE_XMM n
+  %else
+    %assign i last_xmm
+    %rep (last_xmm - 5)
+      movxmm xmm %+ i, [rsp +((i - 6) * 16)]
+      %assign i i-1
+    %endrep
+    add rsp, xmm_stack_space
+    ; there are a couple functions which return from multiple places.
+    ; otherwise, we could uncomment these:
+    ; %undef last_xmm
+    ; %undef xmm_stack_space
+    ; %undef movxmm
+  %endif
+%endmacro
+%else
+%macro SAVE_XMM 1-2
+%endmacro
+%macro RESTORE_XMM 0
+%endmacro
+%endif
 
 ; Name of the rodata section
 ;
@@ -224,8 +373,23 @@
 %elifidn __OUTPUT_FORMAT__,macho32
 %macro SECTION_RODATA 0
 section .text
-fake_got:
 %endmacro
+%elifidn __OUTPUT_FORMAT__,aout
+%define SECTION_RODATA section .data
 %else
 %define SECTION_RODATA section .rodata
 %endif
+
+
+; Tell GNU ld that we don't require an executable stack.
+%ifidn __OUTPUT_FORMAT__,elf32
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+%elifidn __OUTPUT_FORMAT__,elf64
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+%elifidn __OUTPUT_FORMAT__,elfx32
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+%endif
+

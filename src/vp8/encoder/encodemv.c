@@ -1,21 +1,22 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
-#include "common.h"
+#include "vp8/common/common.h"
 #include "encodemv.h"
-#include "entropymode.h"
-#include "systemdependent.h"
+#include "vp8/common/entropymode.h"
+#include "vp8/common/systemdependent.h"
 
 #include <math.h>
 
-#ifdef ENTROPY_STATS
+#ifdef VP8_ENTROPY_STATS
 extern unsigned int active_section;
 #endif
 
@@ -28,15 +29,15 @@ static void encode_mvcomponent(
     const vp8_prob *p = mvc->prob;
     const int x = v < 0 ? -v : v;
 
-    if (x < mvnum_short)     // Small
+    if (x < mvnum_short)     /* Small */
     {
         vp8_write(w, 0, p [mvpis_short]);
         vp8_treed_write(w, vp8_small_mvtree, p + MVPshort, x, 3);
 
         if (!x)
-            return;         // no sign bit
+            return;         /* no sign bit */
     }
-    else                    // Large
+    else                    /* Large */
     {
         int i = 0;
 
@@ -99,7 +100,7 @@ void vp8_encode_motion_vector(vp8_writer *w, const MV *mv, const MV_CONTEXT *mvc
 static unsigned int cost_mvcomponent(const int v, const struct mv_context *mvc)
 {
     const vp8_prob *p = mvc->prob;
-    const int x = v;   //v<0? -v:v;
+    const int x = v;
     unsigned int cost;
 
     if (x < mvnum_short)
@@ -127,37 +128,20 @@ static unsigned int cost_mvcomponent(const int v, const struct mv_context *mvc)
 
         while (--i > 3);
 
-        if (x & 240)
+        if (x & 0xFFF0)
             cost += vp8_cost_bit(p [MVPbits + 3], (x >> 3) & 1);
     }
 
-    return cost;   // + vp8_cost_bit( p [MVPsign], v < 0);
+    return cost;   /* + vp8_cost_bit( p [MVPsign], v < 0); */
 }
-//#define M_LOG2_E 0.693147180559945309417
-//#define log2f(x) (log (x) / (float) M_LOG2_E)
 
-void vp8_build_component_cost_table(int *mvcost[2], int *mvsadcost[2], const MV_CONTEXT *mvc, int mvc_flag[2])
+void vp8_build_component_cost_table(int *mvcost[2], const MV_CONTEXT *mvc, int mvc_flag[2])
 {
-    int i = 1;   //-mv_max;
+    int i = 1;
     unsigned int cost0 = 0;
     unsigned int cost1 = 0;
 
     vp8_clear_system_state();
-#if 0
-    mvsadcost [0] [0] = 300;
-    mvsadcost [1] [0] = 300;
-
-    do
-    {
-        double z = 256 * (2 * (log2f(2 * i) + .6));
-        mvsadcost [0][i] = (int) z;
-        mvsadcost [1][i] = (int) z;
-        mvsadcost [0][-i] = (int) z;
-        mvsadcost [1][-i] = (int) z;
-    }
-    while (++i <= mv_max);
-
-#endif
 
     i = 1;
 
@@ -167,7 +151,6 @@ void vp8_build_component_cost_table(int *mvcost[2], int *mvsadcost[2], const MV_
 
         do
         {
-            //mvcost [0] [i] = cost_mvcomponent( i, &mvc[0]);
             cost0 = cost_mvcomponent(i, &mvc[0]);
 
             mvcost [0] [i] = cost0 + vp8_cost_zero(mvc[0].prob[MVPsign]);
@@ -184,7 +167,6 @@ void vp8_build_component_cost_table(int *mvcost[2], int *mvsadcost[2], const MV_
 
         do
         {
-            //mvcost [1] [i] = cost_mvcomponent( i, mvc[1]);
             cost1 = cost_mvcomponent(i, &mvc[1]);
 
             mvcost [1] [i] = cost1 + vp8_cost_zero(mvc[1].prob[MVPsign]);
@@ -192,27 +174,17 @@ void vp8_build_component_cost_table(int *mvcost[2], int *mvsadcost[2], const MV_
         }
         while (++i <= mv_max);
     }
-
-    /*
-        i=-mv_max;
-        do
-        {
-            mvcost [0] [i] = cost_mvcomponent( i, mvc[0]);
-            mvcost [1] [i] = cost_mvcomponent( i, mvc[1]);
-        }
-        while( ++i <= mv_max);
-    */
 }
 
 
-// Motion vector probability table update depends on benefit.
-// Small correction allows for the fact that an update to an MV probability
-// may have benefit in subsequent frames as well as the current one.
-
+/* Motion vector probability table update depends on benefit.
+ * Small correction allows for the fact that an update to an MV probability
+ * may have benefit in subsequent frames as well as the current one.
+ */
 #define MV_PROB_UPDATE_CORRECTION   -1
 
 
-__inline static void calc_prob(vp8_prob *p, const unsigned int ct[2])
+static void calc_prob(vp8_prob *p, const unsigned int ct[2])
 {
     const unsigned int tot = ct[0] + ct[1];
 
@@ -252,7 +224,7 @@ static void write_component_probs(
     vp8_writer *const w,
     struct mv_context *cur_mvc,
     const struct mv_context *default_mvc_,
-    const struct mv_context *update_mvc,       
+    const struct mv_context *update_mvc,
     const unsigned int events [MVvals],
     unsigned int rc,
     int *updated
@@ -280,24 +252,22 @@ static void write_component_probs(
     vp8_zero(short_bct)
 
 
-    //j=0
+    /* j=0 */
     {
-        int j = 0;
-
         const int c = events [mv_max];
 
-        is_short_ct [0] += c;     // Short vector
-        short_ct [0] += c;       // Magnitude distribution
+        is_short_ct [0] += c;     /* Short vector */
+        short_ct [0] += c;       /* Magnitude distribution */
     }
 
-    //j: 1 ~ mv_max (1023)
+    /* j: 1 ~ mv_max (1023) */
     {
         int j = 1;
 
         do
         {
-            const int c1 = events [mv_max + j];  //positive
-            const int c2 = events [mv_max - j];  //negative
+            const int c1 = events [mv_max + j];  /* positive */
+            const int c2 = events [mv_max - j];  /* negative */
             const int c  = c1 + c2;
             int a = j;
 
@@ -306,13 +276,13 @@ static void write_component_probs(
 
             if (a < mvnum_short)
             {
-                is_short_ct [0] += c;     // Short vector
-                short_ct [a] += c;       // Magnitude distribution
+                is_short_ct [0] += c;     /* Short vector */
+                short_ct [a] += c;       /* Magnitude distribution */
             }
             else
             {
                 int k = mvlong_width - 1;
-                is_short_ct [1] += c;     // Long vector
+                is_short_ct [1] += c;     /* Long vector */
 
                 /*  bit 3 not always encoded. */
                 do
@@ -323,43 +293,6 @@ static void write_component_probs(
         }
         while (++j <= mv_max);
     }
-
-    /*
-    {
-        int j = -mv_max;
-        do
-        {
-
-            const int c = events [mv_max + j];
-            int a = j;
-
-            if( j < 0)
-            {
-                sign_ct [1] += c;
-                a = -j;
-            }
-            else if( j)
-                sign_ct [0] += c;
-
-            if( a < mvnum_short)
-            {
-                is_short_ct [0] += c;     // Short vector
-                short_ct [a] += c;       // Magnitude distribution
-            }
-            else
-            {
-                int k = mvlong_width - 1;
-                is_short_ct [1] += c;     // Long vector
-
-                //  bit 3 not always encoded.
-
-                do
-                    bit_ct [k] [(a >> k) & 1] += c;
-                while( --k >= 0);
-            }
-        } while( ++j <= mv_max);
-    }
-    */
 
     calc_prob(Pnew + mvpis_short, is_short_ct);
 
@@ -423,23 +356,25 @@ static void write_component_probs(
 
 void vp8_write_mvprobs(VP8_COMP *cpi)
 {
-    vp8_writer *const w  = & cpi->bc;
+    vp8_writer *const w  = cpi->bc;
     MV_CONTEXT *mvc = cpi->common.fc.mvc;
     int flags[2] = {0, 0};
-#ifdef ENTROPY_STATS
+#ifdef VP8_ENTROPY_STATS
     active_section = 4;
 #endif
     write_component_probs(
-        w, &mvc[0], &vp8_default_mv_context[0], &vp8_mv_update_probs[0], cpi->MVcount[0], 0, &flags[0]
+        w, &mvc[0], &vp8_default_mv_context[0], &vp8_mv_update_probs[0],
+        cpi->mb.MVcount[0], 0, &flags[0]
     );
     write_component_probs(
-        w, &mvc[1], &vp8_default_mv_context[1], &vp8_mv_update_probs[1], cpi->MVcount[1], 1, &flags[1]
+        w, &mvc[1], &vp8_default_mv_context[1], &vp8_mv_update_probs[1],
+        cpi->mb.MVcount[1], 1, &flags[1]
     );
 
     if (flags[0] || flags[1])
-        vp8_build_component_cost_table(cpi->mb.mvcost, cpi->mb.mvsadcost, (const MV_CONTEXT *) cpi->common.fc.mvc, flags);
+        vp8_build_component_cost_table(cpi->mb.mvcost, (const MV_CONTEXT *) cpi->common.fc.mvc, flags);
 
-#ifdef ENTROPY_STATS
+#ifdef VP8_ENTROPY_STATS
     active_section = 5;
 #endif
 }

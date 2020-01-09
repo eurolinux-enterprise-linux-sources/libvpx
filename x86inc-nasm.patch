@@ -1,0 +1,25 @@
+commit 7ddb5f599286ab4ce7de4061ab94828cdfee36c6
+Author: KO Myung-Hun <komh@chollian.net>
+Date:   Tue Jul 22 10:47:20 2014 +0900
+
+    x86inc: fix compilation with NASM
+    
+    Change-Id: I5978921ab1ccad6648a5bde6ad023c3e3430f5f4
+
+diff --git a/third_party/x86inc/x86inc.asm b/third_party/x86inc/x86inc.asm
+index 2134676..99453a9 100644
+--- a/third_party/x86inc/x86inc.asm
++++ b/third_party/x86inc/x86inc.asm
+@@ -234,10 +234,10 @@ ALIGNMODE k7
+         %define r%1mp %2
+     %elif ARCH_X86_64 ; memory
+         %define r%1m [rsp + stack_offset + %6]
+-        %define r%1mp qword r %+ %1m
++        %define r%1mp qword r %+ %1 %+ m
+     %else
+         %define r%1m [esp + stack_offset + %6]
+-        %define r%1mp dword r %+ %1m
++        %define r%1mp dword r %+ %1 %+ m
+     %endif
+     %define r%1  %2
+ %endmacro

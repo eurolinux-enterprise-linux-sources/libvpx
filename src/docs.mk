@@ -1,10 +1,11 @@
 ##
-##  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+##  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ##
-##  Use of this source code is governed by a BSD-style license and patent
-##  grant that can be found in the LICENSE file in the root of the source
-##  tree. All contributing project authors may be found in the AUTHORS
-##  file in the root of the source tree.
+##  Use of this source code is governed by a BSD-style license
+##  that can be found in the LICENSE file in the root of the source
+##  tree. An additional intellectual property rights grant can be found
+##  in the file PATENTS.  All contributing project authors may
+##  be found in the AUTHORS file in the root of the source tree.
 ##
 
 
@@ -20,9 +21,6 @@ CODEC_DOX :=    mainpage.dox \
 		usage_dx.dox \
 
 # Other doxy files sourced in Markdown
-TXT_DOX-$(CONFIG_VP8)          += vp8_api1_migration.dox
-vp8_api1_migration.dox.DESC     = VP8 API 1.x Migration
-
 TXT_DOX = $(call enabled,TXT_DOX)
 
 %.dox: %.txt
@@ -33,7 +31,8 @@ TXT_DOX = $(call enabled,TXT_DOX)
 
 EXAMPLE_PATH += $(SRC_PATH_BARE) #for CHANGELOG, README, etc
 
-doxyfile: libs.doxy_template libs.doxy examples.doxy
+doxyfile: $(if $(findstring examples, $(ALL_TARGETS)),examples.doxy)
+doxyfile: libs.doxy_template libs.doxy
 	@echo "    [CREATE] $@"
 	@cat $^ > $@
 	@echo "STRIP_FROM_PATH += $(SRC_PATH_BARE) $(BUILD_ROOT)" >> $@
@@ -47,8 +46,8 @@ docs/html/index.html: doxyfile $(CODEC_DOX) $(TXT_DOX)
 	@doxygen $<
 DOCS-yes += docs/html/index.html
 
-INSTALL-DOCS-yes = $(wildcard docs/html/*)
-INSTALL-DOCS-$(CONFIG_CODEC_SRCS) += $(addprefix src/,$(CODEC_DOX))
-INSTALL-DOCS-$(CONFIG_CODEC_SRCS) += src/libs.doxy_template
-INSTALL-DOCS-yes                  += CHANGELOG
-INSTALL-DOCS-yes                  += README
+DIST-DOCS-yes = $(wildcard docs/html/*)
+DIST-DOCS-$(CONFIG_CODEC_SRCS) += $(addprefix src/,$(CODEC_DOX))
+DIST-DOCS-$(CONFIG_CODEC_SRCS) += src/libs.doxy_template
+DIST-DOCS-yes                  += CHANGELOG
+DIST-DOCS-yes                  += README

@@ -1,30 +1,33 @@
-#!/bin/bash
+#!/bin/sh
 ##
-##  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+##  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ##
-##  Use of this source code is governed by a BSD-style license and patent
-##  grant that can be found in the LICENSE file in the root of the source
-##  tree. All contributing project authors may be found in the AUTHORS
-##  file in the root of the source tree.
+##  Use of this source code is governed by a BSD-style license
+##  that can be found in the LICENSE file in the root of the source
+##  tree. An additional intellectual property rights grant can be found
+##  in the file PATENTS.  All contributing project authors may
+##  be found in the AUTHORS file in the root of the source tree.
 ##
 
 
 verbose=0
 set -- $*
 for i; do
-    if [ "$i" == "-o" ]; then
+    if [ "$i" = "-o" ]; then
         on_of=1
-    elif [ "$i" == "-v" ]; then
+    elif [ "$i" = "-v" ]; then
         verbose=1
-    elif [ "$on_of" == "1" ]; then
+    elif [ "$i" = "-g" ]; then
+        args="${args} --debug"
+    elif [ "$on_of" = "1" ]; then
         outfile=$i
-    on_of=0
+        on_of=0
     elif [ -f "$i" ]; then
         infiles="$infiles $i"
-    elif [ "${i:0:2}" == "-l" ]; then
+    elif [ "${i#-l}" != "$i" ]; then
         libs="$libs ${i#-l}"
-    elif [ "${i:0:2}" == "-L" ]; then
-    libpaths="${libpaths} ${i#-L}"
+    elif [ "${i#-L}" != "$i" ]; then
+        libpaths="${libpaths} ${i#-L}"
     else
         args="${args} ${i}"
     fi

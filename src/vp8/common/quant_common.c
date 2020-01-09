@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -108,7 +109,10 @@ int vp8_ac2quant(int QIndex, int Delta)
     else if (QIndex < 0)
         QIndex = 0;
 
-    retval = (ac_qlookup[ QIndex ] * 155) / 100;
+    /* For all x in [0..284], x*155/100 is bitwise equal to (x*101581) >> 16.
+     * The smallest precision for that is '(x*6349) >> 12' but 16 is a good
+     * word size. */
+    retval = (ac_qlookup[ QIndex ] * 101581) >> 16;
 
     if (retval < 8)
         retval = 8;

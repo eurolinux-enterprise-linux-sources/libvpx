@@ -1,10 +1,11 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
@@ -24,7 +25,7 @@
 |vp8_bilinear_predict16x16_neon| PROC
     push            {r4-r5, lr}
 
-    ldr             r12, _bifilter16_coeff_
+    adr             r12, bifilter16_coeff
     ldr             r4, [sp, #12]           ;load parameters from stack
     ldr             r5, [sp, #16]           ;load parameters from stack
 
@@ -349,12 +350,7 @@ filt_blk2d_spo16x16_loop_neon
     ENDP
 
 ;-----------------
-    AREA    bifilters16_dat, DATA, READWRITE            ;read/write by default
-;Data section with name data_area is specified. DCD reserves space in memory for 48 data.
-;One word each is reserved. Label filter_coeff can be used to access the data.
-;Data address: filter_coeff, filter_coeff+4, filter_coeff+8 ...
-_bifilter16_coeff_
-    DCD     bifilter16_coeff
+
 bifilter16_coeff
     DCD     128, 0, 112, 16, 96, 32, 80, 48, 64, 64, 48, 80, 32, 96, 16, 112
 

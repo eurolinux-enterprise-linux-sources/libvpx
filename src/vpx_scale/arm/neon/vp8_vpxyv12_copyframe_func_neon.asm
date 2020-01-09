@@ -1,10 +1,11 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
@@ -13,11 +14,12 @@
     REQUIRE8
     PRESERVE8
 
-    INCLUDE vpx_asm_offsets.asm
+    INCLUDE vpx_scale_asm_offsets.asm
 
     AREA ||.text||, CODE, READONLY, ALIGN=2
 
-;void vp8_yv12_copy_frame_func_neon(YV12_BUFFER_CONFIG *src_ybc, YV12_BUFFER_CONFIG *dst_ybc);
+;void vp8_yv12_copy_frame_func_neon(const YV12_BUFFER_CONFIG *src_ybc,
+;                                   YV12_BUFFER_CONFIG *dst_ybc);
 
 |vp8_yv12_copy_frame_func_neon| PROC
     push            {r4 - r11, lr}
@@ -51,7 +53,8 @@ cp_src_to_dst_height_loop
     mov             r9, r3
     add             r10, r2, r6
     add             r11, r3, r7
-    mov             r12, r5, lsr #7
+    movs            r12, r5, lsr #7
+    ble             extra_cp_needed   ; y_width < 128
 
 cp_src_to_dst_width_loop
     vld1.8          {q0, q1}, [r8]!
@@ -82,6 +85,7 @@ cp_src_to_dst_width_loop
 
     bne             cp_src_to_dst_height_loop
 
+extra_cp_needed
     ands            r10, r5, #0x7f                  ;check to see if extra copy is needed
     sub             r11, r5, r10
     ldr             r2, [r0, #yv12_buffer_config_y_buffer]       ;srcptr1
@@ -109,7 +113,8 @@ cp_src_to_dst_height_uv_loop
     mov             r9, r3
     add             r10, r2, r6
     add             r11, r3, r7
-    mov             r12, r5, lsr #6
+    movs            r12, r5, lsr #6
+    ble             extra_uv_cp_needed
 
 cp_src_to_dst_width_uv_loop
     vld1.8          {q0, q1}, [r8]!
@@ -132,6 +137,7 @@ cp_src_to_dst_width_uv_loop
 
     bne             cp_src_to_dst_height_uv_loop
 
+extra_uv_cp_needed
     ands            r10, r5, #0x3f                  ;check to see if extra copy is needed
     sub             r11, r5, r10
     ldr             r2, [sp]        ;srcptr1

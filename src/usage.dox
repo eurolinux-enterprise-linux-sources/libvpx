@@ -1,6 +1,6 @@
 /*!\page usage Usage
 
-    The vpx Multi-Format codec SDK provides a unified interface amongst its
+    The vpx multi-format codec SDK provides a unified interface amongst its
     supported codecs. This abstraction allows applications using this SDK to
     easily support multiple video formats with minimal code duplication or
     "special casing." This section describes the interface common to all codecs.
@@ -14,8 +14,12 @@
 
     Fore more information on decoder and encoder specific usage, see the
     following pages:
-    \if decoder - \subpage usage_decode \endif
-    \if decoder - \subpage usage_encode \endif
+    \if decoder
+    - \subpage usage_decode
+    \endif
+    \if decoder
+    - \subpage usage_encode
+    \endif
 
     \section usage_types Important Data Types
     There are two important data structures to consider in this interface.
@@ -25,7 +29,7 @@
     codec may write into to store details about a single instance of that codec.
     Most of the context is implementation specific, and thus opaque to the
     application. The context structure as seen by the application is of fixed
-    size, and thus can be allocated eith with automatic storage or dynamically
+    size, and thus can be allocated with automatic storage or dynamically
     on the heap.
 
     Most operations require an initialized codec context. Codec context
@@ -74,7 +78,7 @@
     the ABI is versioned. The ABI version number must be passed at
     initialization time to ensure the application is using a header file that
     matches the library. The current ABI version number is stored in the
-    prepropcessor macros #VPX_CODEC_ABI_VERSION, #VPX_ENCODER_ABI_VERSION, and
+    preprocessor macros #VPX_CODEC_ABI_VERSION, #VPX_ENCODER_ABI_VERSION, and
     #VPX_DECODER_ABI_VERSION. For convenience, each initialization function has
     a wrapper macro that inserts the correct version number. These macros are
     named like the initialization methods, but without the _ver suffix.
@@ -82,6 +86,7 @@
 
     The available initialization methods are:
     \if encoder - #vpx_codec_enc_init (calls vpx_codec_enc_init_ver()) \endif
+    \if multi-encoder - #vpx_codec_enc_init_multi (calls vpx_codec_enc_init_multi_ver()) \endif
     \if decoder - #vpx_codec_dec_init (calls vpx_codec_dec_init_ver()) \endif
 
 
@@ -125,7 +130,7 @@
 
     The special value <code>0</code> is reserved to represent an infinite
     deadline. In this case, the codec will perform as much processing as
-    possible to yeild the highest quality frame.
+    possible to yield the highest quality frame.
 
     By convention, the value <code>1</code> is used to mean "return as fast as
     possible."
@@ -135,7 +140,7 @@
 
 /*! \page usage_xma External Memory Allocation
     Applications that wish to have fine grained control over how and where
-    decoders allocate memory \ref MAY make use of the e_xternal Memory Allocation
+    decoders allocate memory \ref MAY make use of the eXternal Memory Allocation
     (XMA) interface. Not all codecs support the XMA \ref usage_features.
 
     To use a decoder in XMA mode, the decoder \ref MUST be initialized with the
@@ -143,7 +148,7 @@
     allocate is heavily dependent on the size of the encoded video frames. The
     size of the video must be known before requesting the decoder's memory map.
     This stream information can be obtained with the vpx_codec_peek_stream_info()
-    function, which does not require a contructed decoder context. If the exact
+    function, which does not require a constructed decoder context. If the exact
     stream is not known, a stream info structure can be created that reflects
     the maximum size that the decoder instance is required to support.
 
@@ -175,7 +180,7 @@
     \section usage_xma_seg_szalign Segment Size and Alignment
     The sz (size) and align (alignment) parameters describe the required size
     and alignment of the requested segment. Alignment will always be a power of
-    two. Applications \ref MUST honor the aligment requested. Failure to do so
+    two. Applications \ref MUST honor the alignment requested. Failure to do so
     could result in program crashes or may incur a speed penalty.
 
     \section usage_xma_seg_flags Segment Flags

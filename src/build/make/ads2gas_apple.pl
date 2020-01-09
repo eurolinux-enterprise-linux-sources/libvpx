@@ -1,21 +1,29 @@
 #!/usr/bin/env perl
 ##
-##  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+##  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ##
-##  Use of this source code is governed by a BSD-style license and patent
-##  grant that can be found in the LICENSE file in the root of the source
-##  tree. All contributing project authors may be found in the AUTHORS
-##  file in the root of the source tree.
+##  Use of this source code is governed by a BSD-style license
+##  that can be found in the LICENSE file in the root of the source
+##  tree. An additional intellectual property rights grant can be found
+##  in the file PATENTS.  All contributing project authors may
+##  be found in the AUTHORS file in the root of the source tree.
 ##
 
 
-# ads2gas.pl
+# ads2gas_apple.pl
 # Author: Eric Fung (efung (at) acm.org)
 #
 # Convert ARM Developer Suite 1.0.1 syntax assembly source to GNU as format
 #
-# Usage: cat inputfile | perl ads2gas.pl > outputfile
+# Usage: cat inputfile | perl ads2gas_apple.pl > outputfile
 #
+
+my $chromium = 0;
+
+foreach my $arg (@ARGV) {
+    $chromium = 1 if ($arg eq "-chromium");
+}
+
 print "@ This file was created from a .asm file\n";
 print "@  using the ads2gas_apple.pl script.\n\n";
 print "\t.set WIDE_REFERENCE, 0\n";
@@ -29,6 +37,8 @@ my @mapping_list = ("\$0", "\$1", "\$2", "\$3", "\$4", "\$5", "\$6", "\$7", "\$8
 
 my @incoming_array;
 
+my @imported_functions;
+
 # Perl trim function to remove whitespace from the start and end of the string
 sub trim($)
 {
@@ -40,8 +50,11 @@ sub trim($)
 
 while (<STDIN>)
 {
+    # Load and store alignment
+    s/@/,:/g;
+
     # Comment character
-    s/;/@/g;
+    s/;/ @/g;
 
     # Hexadecimal constants prefaced by 0x
     s/#&/#0x/g;
@@ -96,7 +109,10 @@ while (<STDIN>)
     s/CODE([0-9][0-9])/.code $1/;
 
     # No AREA required
-    s/^\s*AREA.*$/.text/;
+    # But ALIGNs in AREA must be obeyed
+    s/^\s*AREA.*ALIGN=([0-9])$/.text\n.p2align $1/;
+    # If no ALIGN, strip the AREA and align to 4 bytes
+    s/^\s*AREA.*$/.text\n.p2align 2/;
 
     # DCD to .word
     # This one is for incoming symbols
@@ -125,7 +141,18 @@ while (<STDIN>)
     # Make function visible to linker, and make additional symbol with
     # prepended underscore
     s/EXPORT\s+\|([\$\w]*)\|/.globl _$1\n\t.globl $1/;
-    s/IMPORT\s+\|([\$\w]*)\|/.globl $1/;
+
+    # Prepend imported functions with _
+    if (s/IMPORT\s+\|([\$\w]*)\|/.globl $1/)
+    {
+        $function = trim($1);
+        push(@imported_functions, $function);
+    }
+
+    foreach $function (@imported_functions)
+    {
+        s/$function/_$function/;
+    }
 
     # No vertical bars required; make additional symbol with prepended
     # underscore
@@ -136,8 +163,8 @@ while (<STDIN>)
     # put the colon at the end of the line in the macro
     s/^([a-zA-Z_0-9\$]+)/$1:/ if !/EQU/;
 
-    # Strip ALIGN
-    s/\sALIGN/@ ALIGN/g;
+    # ALIGN directive
+    s/ALIGN/.balign/g;
 
     # Strip ARM
     s/\sARM/@ ARM/g;
@@ -150,8 +177,8 @@ while (<STDIN>)
     s/\sPRESERVE8/@ PRESERVE8/g;
 
     # Strip PROC and ENDPROC
-    s/PROC/@/g;
-    s/ENDP/@/g;
+    s/\bPROC\b/@/g;
+    s/\bENDP\b/@/g;
 
     # EQU directive
     s/(.*)EQU(.*)/.set $1, $2/;
@@ -168,7 +195,7 @@ while (<STDIN>)
         $trimmed =~ s/,//g;
 
         # string to array
-        @incoming_array = split(/ /, $trimmed);
+        @incoming_array = split(/\s+/, $trimmed);
 
         print ".macro @incoming_array[0]\n";
 
@@ -190,5 +217,19 @@ while (<STDIN>)
 #   s/\$/\\/g;                  # End macro definition
     s/MEND/.endm/;              # No need to tell it where to stop assembling
     next if /^\s*END\s*$/;
+
+    # Clang used by Chromium differs slightly from clang in XCode in what it
+    # will accept in the assembly.
+    if ($chromium) {
+        s/qsubaddx/qsax/i;
+        s/qaddsubx/qasx/i;
+        s/ldrneb/ldrbne/i;
+        s/ldrneh/ldrhne/i;
+        s/(vqshrun\.s16 .*, \#)0$/${1}8/i;
+
+        # http://llvm.org/bugs/show_bug.cgi?id=16022
+        s/\.include/#include/;
+    }
+
     print;
 }

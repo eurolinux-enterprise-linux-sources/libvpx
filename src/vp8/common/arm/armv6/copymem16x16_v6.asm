@@ -1,10 +1,11 @@
 ;
-;  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+;  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
 ;
-;  Use of this source code is governed by a BSD-style license and patent
-;  grant that can be found in the LICENSE file in the root of the source
-;  tree. All contributing project authors may be found in the AUTHORS
-;  file in the root of the source tree.
+;  Use of this source code is governed by a BSD-style license
+;  that can be found in the LICENSE file in the root of the source
+;  tree. An additional intellectual property rights grant can be found
+;  in the file PATENTS.  All contributing project authors may
+;  be found in the AUTHORS file in the root of the source tree.
 ;
 
 
@@ -21,9 +22,7 @@
     ;push   {r4-r7}
 
     ;preload
-    pld     [r0]
-    pld     [r0, r1]
-    pld     [r0, r1, lsl #1]
+    pld     [r0, #31]                ; preload for next 16x16 block
 
     ands    r4, r0, #15
     beq     copy_mem16x16_fast
@@ -89,6 +88,8 @@ copy_mem16x16_1_loop
     ldrneb  r6, [r0, #2]
     ldrneb  r7, [r0, #3]
 
+    pld     [r0, #31]               ; preload for next 16x16 block
+
     bne     copy_mem16x16_1_loop
 
     ldmia       sp!, {r4 - r7}
@@ -120,6 +121,8 @@ copy_mem16x16_4_loop
     ldrne   r6, [r0, #8]
     ldrne   r7, [r0, #12]
 
+    pld     [r0, #31]               ; preload for next 16x16 block
+
     bne     copy_mem16x16_4_loop
 
     ldmia       sp!, {r4 - r7}
@@ -147,6 +150,7 @@ copy_mem16x16_8_loop
 
     add     r2, r2, r3
 
+    pld     [r0, #31]               ; preload for next 16x16 block
     bne     copy_mem16x16_8_loop
 
     ldmia       sp!, {r4 - r7}
@@ -170,6 +174,7 @@ copy_mem16x16_fast_loop
     ;stm        r2, {r4-r7}
     add     r2, r2, r3
 
+    pld     [r0, #31]               ; preload for next 16x16 block
     bne     copy_mem16x16_fast_loop
 
     ldmia       sp!, {r4 - r7}

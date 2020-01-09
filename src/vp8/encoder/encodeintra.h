@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -12,13 +13,9 @@
 #define _ENCODEINTRA_H_
 #include "onyx_int.h"
 
-void vp8_encode_intra16x16mby(const VP8_ENCODER_RTCD *, MACROBLOCK *x);
-void vp8_encode_intra16x16mbuv(const VP8_ENCODER_RTCD *, MACROBLOCK *x);
-void vp8_encode_intra4x4mby(const VP8_ENCODER_RTCD *, MACROBLOCK *mb);
-void vp8_encode_intra4x4block(const VP8_ENCODER_RTCD *, MACROBLOCK *x, BLOCK *be, BLOCKD *b, int best_mode);
-void vp8_update_mode_context(int *abmode, int *lbmode, int i, int best_mode);
-void vp8_encode_intra4x4block_rd(const VP8_ENCODER_RTCD *, MACROBLOCK *x, BLOCK *be, BLOCKD *b, int best_mode);
-void vp8_encode_intra16x16mbyrd(const VP8_ENCODER_RTCD *, MACROBLOCK *x);
-void vp8_encode_intra16x16mbuvrd(const VP8_ENCODER_RTCD *, MACROBLOCK *x);
-
+int vp8_encode_intra(VP8_COMP *cpi, MACROBLOCK *x, int use_dc_pred);
+void vp8_encode_intra16x16mby(MACROBLOCK *x);
+void vp8_encode_intra16x16mbuv(MACROBLOCK *x);
+void vp8_encode_intra4x4mby(MACROBLOCK *mb);
+void vp8_encode_intra4x4block(MACROBLOCK *x, int ib);
 #endif

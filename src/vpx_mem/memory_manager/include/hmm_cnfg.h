@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
@@ -44,8 +45,8 @@
 #define HMM_UNIQUE(BASE) hmm_ ## BASE
 
 /* Number of bytes in an Address Alignment Unit (AAU). */
-//fwg
-//#define HMM_ADDR_ALIGN_UNIT sizeof(int)
+// fwg
+// #define HMM_ADDR_ALIGN_UNIT sizeof(int)
 #define HMM_ADDR_ALIGN_UNIT 32
 
 /* Number of AAUs in a Block Alignment Unit (BAU). */
@@ -64,7 +65,7 @@ void hmm_dflt_abort(const char *, const char *);
 ** statement.  If you remove the definition of this macro, no self-auditing
 ** will be performed. */
 #define HMM_AUDIT_FAIL \
-    hmm_dflt_abort(__FILE__, HMM_SYM_TO_STRING(__LINE__));
+  hmm_dflt_abort(__FILE__, HMM_SYM_TO_STRING(__LINE__));
 
 #elif HMM_CNFG_NUM == 0
 
@@ -89,8 +90,8 @@ extern const char *HMM_UNIQUE(fail_file);
 extern unsigned HMM_UNIQUE(fail_line);
 
 #define HMM_AUDIT_FAIL \
-    { HMM_UNIQUE(fail_file) = __FILE__; HMM_UNIQUE(fail_line) = __LINE__; \
-        longjmp(HMM_UNIQUE(jmp_buf), 1); }
+  { HMM_UNIQUE(fail_file) = __FILE__; HMM_UNIQUE(fail_line) = __LINE__; \
+    longjmp(HMM_UNIQUE(jmp_buf), 1); }
 
 #elif HMM_CNFG_NUM == 1
 

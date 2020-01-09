@@ -1,79 +1,64 @@
 /*
- *  Copyright (c) 2010 The VP8 project authors. All Rights Reserved.
+ *  Copyright (c) 2010 The WebM project authors. All Rights Reserved.
  *
- *  Use of this source code is governed by a BSD-style license and patent
- *  grant that can be found in the LICENSE file in the root of the source
- *  tree. All contributing project authors may be found in the AUTHORS
- *  file in the root of the source tree.
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree. An additional intellectual property rights grant can be found
+ *  in the file PATENTS.  All contributing project authors may
+ *  be found in the AUTHORS file in the root of the source tree.
  */
 
 
+#include "vpx_config.h"
+#include "vp8_rtcd.h"
+#include "vp8/encoder/block.h"
 #include <math.h>
 #include "vpx_mem/vpx_mem.h"
+#include "vp8/encoder/quantize.h"
+#include "vp8/common/entropy.h"
 
-#include "quantize.h"
-#include "entropy.h"
-#include "predictdc.h"
 
-DECLARE_ALIGNED(16, const short, vp8_rvsplus1_default_zig_zag1d[16]) =
+#if HAVE_NEON
+
+/* vp8_quantize_mbX functions here differs from corresponding ones in
+ * quantize.c only by using quantize_b_pair function pointer instead of
+ * the regular quantize_b function pointer */
+void vp8_quantize_mby_neon(MACROBLOCK *x)
 {
-    1,  2,  6,  7,
-    3,  5,  8,  13,
-    4,  9,  12, 14,
-    10, 11, 15, 16,
-};
+    int i;
+    int has_2nd_order = (x->e_mbd.mode_info_context->mbmi.mode != B_PRED
+        && x->e_mbd.mode_info_context->mbmi.mode != SPLITMV);
 
+    for (i = 0; i < 16; i+=2)
+        x->quantize_b_pair(&x->block[i], &x->block[i+1],
+                           &x->e_mbd.block[i], &x->e_mbd.block[i+1]);
 
-extern int vp8_fast_quantize_b_neon_func(short *coeff_ptr, short *zbin_ptr, short *qcoeff_ptr, short *dqcoeff_ptr, short *dequant_ptr, const short *scan_mask, short *round_ptr, short *quant_ptr);
-
-void vp8_fast_quantize_b_neon(BLOCK *b, BLOCKD *d)
-{
-    d->eob = vp8_fast_quantize_b_neon_func(b->coeff, &b->zbin[0][0], d->qcoeff, d->dqcoeff, d->dequant[0], vp8_rvsplus1_default_zig_zag1d, &b->round[0][0], &b->quant[0][0]);
+    if(has_2nd_order)
+        x->quantize_b(&x->block[24], &x->e_mbd.block[24]);
 }
 
-/*
-//neon code is written according to the following rewritten c code
-void vp8_fast_quantize_b_neon(BLOCK *b,BLOCKD *d)
+void vp8_quantize_mb_neon(MACROBLOCK *x)
 {
-    int i, rc, eob;
-    int zbin;
-    int x, x1, y, z, sz;
-    short *coeff_ptr  = &b->Coeff[0];
-    short *zbin_ptr   = &b->Zbin[0][0];
-    short *round_ptr  = &b->Round[0][0];
-    short *quant_ptr  = &b->Quant[0][0];
-    short *qcoeff_ptr = d->qcoeff;
-    short *dqcoeff_ptr= d->dqcoeff;
-    short *dequant_ptr= &d->Dequant[0][0];
+    int i;
+    int has_2nd_order=(x->e_mbd.mode_info_context->mbmi.mode != B_PRED
+        && x->e_mbd.mode_info_context->mbmi.mode != SPLITMV);
 
-    eob = 0;
+    for (i = 0; i < 24; i+=2)
+        x->quantize_b_pair(&x->block[i], &x->block[i+1],
+                           &x->e_mbd.block[i], &x->e_mbd.block[i+1]);
 
-    for(i=0;i<16;i++)
-    {
-        z    = coeff_ptr[i];
-        zbin = zbin_ptr[i] ;
-        x  = abs(z);                                    // x = abs(z)
-
-        if(x>=zbin)
-        {
-            sz = (z>>31);                               // sign of z
-            y  = ((x+round_ptr[i])*quant_ptr[i])>>16;     // quantize (x)
-            x1  = (y^sz) - sz;                          // get the sign back
-
-            qcoeff_ptr[i] = x1;                          // write to destination
-            dqcoeff_ptr[i] = x1 * dequant_ptr[i];         // dequantized value
-
-            if(y)
-            {
-                if(eob<vp8_rvsplus1_default_zig_zag1d[i])
-                    eob=(int)vp8_rvsplus1_default_zig_zag1d[i];         // last nonzero coeffs
-            }
-        }else
-        {
-            qcoeff_ptr[i] = 0;                          // write to destination
-            dqcoeff_ptr[i] = 0;         // dequantized value
-        }
-    }
-        d->eob = eob;
+    if (has_2nd_order)
+        x->quantize_b(&x->block[24], &x->e_mbd.block[24]);
 }
-*/
+
+
+void vp8_quantize_mbuv_neon(MACROBLOCK *x)
+{
+    int i;
+
+    for (i = 16; i < 24; i+=2)
+        x->quantize_b_pair(&x->block[i], &x->block[i+1],
+                           &x->e_mbd.block[i], &x->e_mbd.block[i+1]);
+}
+
+#endif /* HAVE_NEON */

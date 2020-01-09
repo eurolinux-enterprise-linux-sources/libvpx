@@ -11,9 +11,13 @@
   source codec deployed on millions of computers and devices worldwide.
 
   This distribution of the WebM VP8 Codec SDK includes the following support:
-  
-  \if vp8_encoder    - \ref vp8_encoder   \endif
-  \if vp8_decoder    - \ref vp8_decoder   \endif
+
+  \if vp8_encoder
+  - \ref vp8_encoder
+  \endif
+  \if vp8_decoder
+  - \ref vp8_decoder
+  \endif
 
 
   \section main_startpoints Starting Points
@@ -24,14 +28,18 @@
   - Read the \ref samples "sample code" for examples of how to interact with the
     codec.
   - \ref codec reference
-    \if encoder - \ref encoder reference \endif
-    \if decoder - \ref decoder reference \endif
+    \if encoder
+    - \ref encoder reference
+    \endif
+    \if decoder
+    - \ref decoder reference
+    \endif
 
   \section main_support Support Options & FAQ
   The WebM project is an open source project supported by its community. For
   questions about this SDK, please mail the apps-devel@webmproject.org list.
   To contribute, see http://www.webmproject.org/code/contribute and mail
-  vpx-devel@webmproject.org.
+  codec-devel@webmproject.org.
 */
 
 /*!\page changelog CHANGELOG
