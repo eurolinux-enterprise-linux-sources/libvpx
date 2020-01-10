@@ -1,0 +1,40 @@
+diff -up libvpx-v1.2.0/vp8/common/x86/iwalsh_mmx.asm.nasm libvpx-v1.2.0/vp8/common/x86/iwalsh_mmx.asm
+--- libvpx-v1.2.0/vp8/common/x86/iwalsh_mmx.asm.nasm	2013-02-28 18:51:11.000000000 +0100
++++ libvpx-v1.2.0/vp8/common/x86/iwalsh_mmx.asm	2013-04-05 14:16:31.784250142 +0200
+@@ -24,7 +24,7 @@ sym(vp8_short_inv_walsh4x4_mmx):
+ 
+     movq        mm0, [rdx + 0]    ;ip[0]
+     movq        mm1, [rdx + 8]    ;ip[4]
+-    movd        mm7, rax
++    movq        mm7, rax
+ 
+     movq        mm2, [rdx + 16]   ;ip[8]
+     movq        mm3, [rdx + 24]   ;ip[12]
+diff -up libvpx-v1.2.0/vp8/common/x86/mfqe_sse2.asm.nasm libvpx-v1.2.0/vp8/common/x86/mfqe_sse2.asm
+--- libvpx-v1.2.0/vp8/common/x86/mfqe_sse2.asm.nasm	2013-02-28 18:51:11.000000000 +0100
++++ libvpx-v1.2.0/vp8/common/x86/mfqe_sse2.asm	2013-04-05 15:20:26.521402526 +0200
+@@ -271,7 +271,11 @@ sym(vp8_variance_and_sad_16x16_sse2):
+ SECTION_RODATA
+ align 16
+ t128:
+-    ddq 128
++%if CONFIG_BIG_ENDIAN
++    dq  0, 128
++%else
++    dq  128, 0
++%endif
+ align 16
+ tMFQE: ; 1 << MFQE_PRECISION
+     times 8 dw 0x10
+diff -up libvpx-v1.2.0/vp8/encoder/x86/temporal_filter_apply_sse2.asm.nasm libvpx-v1.2.0/vp8/encoder/x86/temporal_filter_apply_sse2.asm
+--- libvpx-v1.2.0/vp8/encoder/x86/temporal_filter_apply_sse2.asm.nasm	2013-02-28 18:51:11.000000000 +0100
++++ libvpx-v1.2.0/vp8/encoder/x86/temporal_filter_apply_sse2.asm	2013-04-05 14:16:31.784250142 +0200
+@@ -50,7 +50,7 @@ sym(vp8_temporal_filter_apply_sse2):
+         ; 0x8000 >> (16 - strength)
+         mov         rdx,            16
+         sub         rdx,            arg(4) ; 16 - strength
+-        movd        xmm4,           rdx    ; can't use rdx w/ shift
++        movq        xmm4,           rdx    ; can't use rdx w/ shift
+         movdqa      xmm5,           [GLOBAL(_const_top_bit)]
+         psrlw       xmm5,           xmm4
+         movdqa      [rsp + rounding_bit], xmm5
