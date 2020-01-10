@@ -1,26 +1,21 @@
 %global majorver 1
-%global minorver 2
+%global minorver 3
 %global tinyver  0
 
 Name:			libvpx
 Summary:		VP8 Video Codec SDK
 Version:		%{majorver}.%{minorver}.%{tinyver}
 %global soversion	%{version}
-Release:		4%{?dist}
+Release:		5%{?dist}
 License:		BSD
 Group:			System Environment/Libraries
-# Google forgot to make a 1.2.0 tarball, so I made one from the git tag.
-# git clone https://code.google.com/p/webm.libvpx/ libvpx
-# cd libvpx
-# git checkout v1.2.0
-# rm -rf .git*
-# cd ..
-# mv libvpx libvpx-v1.2.0
-# tar xvfj libvpx-v1.2.0.tar.bz2 libvpx-v1.2.0
 Source0:		http://webm.googlecode.com/files/%{name}-v%{version}.tar.bz2
 # Thanks to debian.
 Source2:		libvpx.ver
-Patch0:			libvpx-nasm.patch
+Patch0:			Bug-fix-in-ssse3-quantize-function.patch
+Patch1:			x86inc-nasm.patch
+Patch2:			vp9-nasm.patch
+Patch3:			sectalign-nasm.patch
 URL:			http://www.webmproject.org/tools/vp8-sdk/
 %ifarch %{ix86} x86_64
 BuildRequires:		nasm
@@ -52,7 +47,11 @@ and decoder.
 
 %prep
 %setup -q -n %{name}-v%{version}
-%patch0 -p1 -b .nasm
+%patch0 -p1 -b .patch0
+%patch1 -p1 -b .x86inc-nasm
+%patch2 -p1 -b .vp9-nasm
+%patch3 -p1 -b .sectalign-nasm
+sed -i -e 's/^\(global .*\) PRIVATE$/\1/' $(find -name "*.asm")
 
 %build
 %ifarch %{ix86}
@@ -61,7 +60,11 @@ and decoder.
 %ifarch	x86_64
 %global	vpxtarget x86_64-linux-gcc
 %else
+%ifarch armv7hl
+%global vpxtarget armv7-linux-gcc
+%else
 %global vpxtarget generic-gnu
+%endif
 %endif
 %endif
 
@@ -73,7 +76,12 @@ and decoder.
 %global	generic_target 0
 %endif
 
-./configure --target=%{vpxtarget} --enable-pic --disable-install-srcs \
+%ifarch armv7hl
+CROSS=armv7hl-redhat-linux-gnueabi- CHOST=armv7hl-redhat-linux-gnueabi-hardfloat ./configure \
+%else
+./configure --target=%{vpxtarget} \
+%endif
+--enable-pic --disable-install-srcs --as=nasm \
 %if ! %{generic_target}
 --enable-shared \
 %endif
@@ -83,6 +91,21 @@ and decoder.
 sed -i "s|-O3|%{optflags}|g" libs-%{vpxtarget}.mk
 sed -i "s|-O3|%{optflags}|g" examples-%{vpxtarget}.mk
 sed -i "s|-O3|%{optflags}|g" docs-%{vpxtarget}.mk
+
+%ifarch armv7hl
+#hackety hack hack
+sed -i "s|AR=armv7hl-redhat-linux-gnueabi-ar|AR=ar|g" libs-%{vpxtarget}.mk
+sed -i "s|AR=armv7hl-redhat-linux-gnueabi-ar|AR=ar|g" examples-%{vpxtarget}.mk
+sed -i "s|AR=armv7hl-redhat-linux-gnueabi-ar|AR=ar|g" docs-%{vpxtarget}.mk
+
+sed -i "s|AS=armv7hl-redhat-linux-gnueabi-as|AS=as|g" libs-%{vpxtarget}.mk
+sed -i "s|AS=armv7hl-redhat-linux-gnueabi-as|AS=as|g" examples-%{vpxtarget}.mk
+sed -i "s|AS=armv7hl-redhat-linux-gnueabi-as|AS=as|g" docs-%{vpxtarget}.mk
+
+sed -i "s|NM=armv7hl-redhat-linux-gnueabi-nm|NM=nm|g" libs-%{vpxtarget}.mk
+sed -i "s|NM=armv7hl-redhat-linux-gnueabi-nm|NM=nm|g" examples-%{vpxtarget}.mk
+sed -i "s|NM=armv7hl-redhat-linux-gnueabi-nm|NM=nm|g" docs-%{vpxtarget}.mk
+%endif
 
 make %{?_smp_mflags} verbose=true target=libs
 
@@ -155,23 +178,20 @@ popd
 %{_bindir}/*
 
 %changelog
-* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 1.2.0-4
-- Mass rebuild 2014-01-24
+* Thu Mar 20 2014 Wim Taymans <wtaymans@redhat.com> - 1.3.0-4
+- fix Illegal Instruction abort
 
-* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 1.2.0-3
-- Mass rebuild 2013-12-27
+* Thu Feb 13 2014 Dan Horák <dan[at]danny.cz> - 1.3.0-3
+- update library symbol list for 1.3.0 from Debian
 
-* Fri Apr 5 2013 Martin Stransky <stransky@redhat.com> - 1.2.0-2
-- Build fix for nasm
+* Tue Feb 11 2014 Tom Callaway <spot@fedoraproject.org> - 1.3.0-2
+- armv7hl specific target
+
+* Tue Feb 11 2014 Tom Callaway <spot@fedoraproject.org> - 1.3.0-1
+- update to 1.3.0
 
 * Thu Feb 28 2013 Tom Callaway <spot@fedoraproject.org> - 1.2.0-1
 - update to 1.2.0
-
-* Thu Feb 14 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.1.0-3
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_19_Mass_Rebuild
-
-* Thu Jul 19 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.1.0-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
 
 * Tue May 29 2012 Tom Callaway <spot@fedoraproject.org> - 1.1.0-1
 - update to 1.1.0
@@ -185,9 +205,6 @@ popd
 
 * Mon Jan 30 2012 Tom Callaway <spot@fedoraproject.org> - 1.0.0-1
 - update to 1.0.0
-
-* Fri Jan 13 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 0.9.7.1-4
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
 
 * Mon Oct 10 2011 Dan Horák <dan[at]danny.cz> - 0.9.7.1-3
 - use macro instead of hard-coded version
