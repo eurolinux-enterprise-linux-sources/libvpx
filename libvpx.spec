@@ -6,7 +6,7 @@ Name:			libvpx
 Summary:		VP8 Video Codec SDK
 Version:		%{majorver}.%{minorver}.%{tinyver}
 %global soversion	%{version}
-Release:		2%{?dist}
+Release:		4%{?dist}
 License:		BSD
 Group:			System Environment/Libraries
 # Google forgot to make a 1.2.0 tarball, so I made one from the git tag.
@@ -155,6 +155,12 @@ popd
 %{_bindir}/*
 
 %changelog
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 1.2.0-4
+- Mass rebuild 2014-01-24
+
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 1.2.0-3
+- Mass rebuild 2013-12-27
+
 * Fri Apr 5 2013 Martin Stransky <stransky@redhat.com> - 1.2.0-2
 - Build fix for nasm
 
